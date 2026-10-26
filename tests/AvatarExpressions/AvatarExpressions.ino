@@ -31,8 +31,10 @@ constexpr bool cyclesAndKeepsSleepingEyesClosed() {
   if (state.expressionId() != AvatarExpressionId::Sleeping || state.expression().blinks) return false;
   if (state.update(10000, false) || state.openness() != 1.0f) return false;
   press(state, 10100);
+  if (state.expressionId() != AvatarExpressionId::Angry || !state.expression().blinks) return false;
+  press(state, 10200);
   return state.expressionId() == AvatarExpressionId::Neutral && state.openness() == 1.0f &&
-         !state.update(13639, false) && state.update(13640, false);
+         !state.update(13739, false) && state.update(13740, false);
 }
 
 constexpr bool changesExpressionDuringBlink() {
@@ -59,7 +61,7 @@ static_assert(cyclesAndKeepsSleepingEyesClosed(), "Expression cycle or sleeping 
 static_assert(changesExpressionDuringBlink(), "Expression inherited a half-closed blink");
 static_assert(buttonHandlesClockRollover(), "Button debounce failed across millis rollover");
 
-// On-device render checks: all four faces must produce distinct frames, with
+// On-device render checks: all faces must produce distinct frames, with
 // visible eyes, and the awake expressions must change when they blink.
 uint32_t frameHash(const AvatarExpression& expression, float openness, int& eyePixels) {
   uint32_t hash = 2166136261u;
@@ -77,8 +79,9 @@ uint32_t frameHash(const AvatarExpression& expression, float openness, int& eyeP
 bool passed = true;
 void setup() {
   Serial.begin(115200);
-  uint32_t hashes[4];
-  for (uint8_t i = 0; i < 4; ++i) {
+  constexpr uint8_t count = static_cast<uint8_t>(AvatarExpressionId::Count);
+  uint32_t hashes[count];
+  for (uint8_t i = 0; i < count; ++i) {
     const auto& expression = avatarExpression(static_cast<AvatarExpressionId>(i));
     int eyePixels;
     hashes[i] = frameHash(expression, 1.0f, eyePixels);

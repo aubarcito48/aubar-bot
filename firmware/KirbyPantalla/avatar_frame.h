@@ -1,7 +1,7 @@
 #pragma once
 #include "avatar_render.h"
 
-// Covers all eye poses and their gaze limits in the four current expressions.
+// Covers all current eye poses and their gaze limits (including angry eyes).
 // The body does not move, so the rest of the display is drawn only at startup.
 constexpr int FACE_X = 20;
 constexpr int FACE_Y = 140;

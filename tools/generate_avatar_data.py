@@ -28,7 +28,8 @@ lines.append('constexpr AvatarExpression AVATAR_EXPRESSIONS[] = {')
 for label, source, blinks in [('neutral', 'neutral', True),
                               ('contento', 'joyful-wide', True),
                               ('sorprendido', 'surprised-wide-left', True),
-                              ('dormido', 'eyes-closed', False)]:
+                              ('dormido', 'eyes-closed', False),
+                              ('enojado', 'angry-right', True)]:
     eyes = definition['expressions'][source]['eyes']
     shapes = []
     for side in ('left', 'right'):

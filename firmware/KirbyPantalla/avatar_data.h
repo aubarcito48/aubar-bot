@@ -15,6 +15,8 @@ constexpr AvatarExpression AVATAR_EXPRESSIONS[] = {
   {"sorprendido", {51.400000f, 60.573828f, 0.000000f, 0.000000f, 0.000000f}, {50.500000f, 59.873828f, 0.000000f, 0.000000f, 0.000000f}, 62.749219f, true},
   // eyes-closed
   {"dormido", {56.133984f, 25.973828f, 0.000000f, 0.000000f, 0.000000f}, {56.133984f, 25.629297f, 0.000000f, 0.000000f, 0.000000f}, 63.025391f, false},
+  // angry-right
+  {"enojado", {20.908203f, 50.874609f, 0.000000f, 0.000000f, -30.865625f}, {20.908203f, 50.874609f, 0.000000f, 0.000000f, 28.781641f}, 45.808984f, true},
 };
 static_assert(sizeof(AVATAR_EXPRESSIONS) / sizeof(AVATAR_EXPRESSIONS[0]) ==
               static_cast<uint8_t>(AvatarExpressionId::Count), "Expression count mismatch");

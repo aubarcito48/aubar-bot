@@ -47,7 +47,7 @@ void setup() {
   avatar.framePresented(millis());
   gaze.reset(millis());
   demo.reset(millis());
-  Serial.println("Kirby listo. Demo automatica: neutral > contento > sorprendido > dormido");
+  Serial.println("Kirby listo. Demo automatica: neutral > contento > sorprendido > dormido > enojado");
   Serial.println("BOOT: avanzar expresion y reiniciar su tiempo");
 }
 

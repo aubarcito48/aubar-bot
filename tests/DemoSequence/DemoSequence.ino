@@ -9,8 +9,10 @@ constexpr bool runsFullCycle() {
   if (!demo.update(24100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Surprised) return false;
   if (!demo.update(36100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Sleeping) return false;
   if (avatar.expression().blinks || demo.update(42099, avatar, false)) return false;
-  if (!demo.update(42100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Neutral) return false;
-  return avatar.openness() == 1 && !avatar.update(45599, false) && avatar.update(45600, false);
+  if (!demo.update(42100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Angry) return false;
+  if (!avatar.expression().blinks || demo.update(54099, avatar, false)) return false;
+  if (!demo.update(54100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Neutral) return false;
+  return avatar.openness() == 1 && !avatar.update(57599, false) && avatar.update(57600, false);
 }
 
 constexpr bool manualPressWinsAtDeadline() {

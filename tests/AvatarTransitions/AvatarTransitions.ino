@@ -52,8 +52,9 @@ void setup() {
   // All ordered expression pairs: verify intermediate poses and both extreme
   // gaze positions. A partial frame must match the full renderer exactly, and
   // no eyes may be left outside the region that gets refreshed.
-  for (uint8_t from = 0; from < 4; ++from) {
-    for (uint8_t to = 0; to < 4; ++to) {
+  constexpr uint8_t count = static_cast<uint8_t>(AvatarExpressionId::Count);
+  for (uint8_t from = 0; from < count; ++from) {
+    for (uint8_t to = 0; to < count; ++to) {
       ExpressionTransition transition(avatarExpression(static_cast<AvatarExpressionId>(from)));
       transition.setTarget(avatarExpression(static_cast<AvatarExpressionId>(to)), 0);
       for (uint32_t time : {0u, 225u, 450u}) {
