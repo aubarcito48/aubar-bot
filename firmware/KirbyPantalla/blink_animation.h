@@ -7,6 +7,11 @@ class BlinkAnimation {
  public:
   constexpr BlinkPhase phase() const { return phase_; }
 
+  constexpr void reset(uint32_t now) {
+    phase_ = BlinkPhase::Open;
+    frameStartedAt_ = now;
+  }
+
   constexpr float openness() const {
     switch (phase_) {
       case BlinkPhase::Open: return 1.0f;
