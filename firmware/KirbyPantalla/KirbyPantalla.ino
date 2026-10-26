@@ -5,12 +5,14 @@
 #include "gaze_animation.h"
 #include "avatar_transition.h"
 #include "avatar_frame.h"
+#include "demo_sequence.h"
 
 // Frontal expressions adapted from the original Avatar Lab export.
 // This does not execute Avatar Lab's web animation engine.
 static uint16_t scanline[LCD_WIDTH];
 static AvatarState avatar;
 static GazeAnimation gaze;
+static DemoSequence demo;
 static ExpressionTransition expressionTransition(avatarExpression(AvatarExpressionId::Neutral));
 static GazeTransition gazeTransition;
 static uint16_t facePixels[FACE_WIDTH * FACE_HEIGHT];
@@ -44,15 +46,21 @@ void setup() {
   renderFaceFrame(facePixels, avatar.expression(), avatar.openness(), 0);
   avatar.framePresented(millis());
   gaze.reset(millis());
-  Serial.println("Kirby listo. BOOT: neutral > contento > sorprendido > dormido");
+  demo.reset(millis());
+  Serial.println("Kirby listo. Demo automatica: neutral > contento > sorprendido > dormido");
+  Serial.println("BOOT: avanzar expresion y reiniciar su tiempo");
 }
 
 void loop() {
   const uint32_t now = millis();
   const auto previousExpression = avatar.expressionId();
-  const bool faceChanged = avatar.update(now, digitalRead(EXPRESSION_BUTTON_PIN) == LOW);
+  bool faceChanged = avatar.update(now, digitalRead(EXPRESSION_BUTTON_PIN) == LOW);
+  const bool manualChange = avatar.expressionId() != previousExpression;
+  if (demo.update(now, avatar, manualChange)) faceChanged = true;
   const bool expressionChanged = avatar.expressionId() != previousExpression;
   if (expressionChanged) {
+    Serial.print("Expresion: ");
+    Serial.println(avatar.expression().name);
     expressionTransition.setTarget(avatar.expression(), now);
     gaze.reset(now);
   }

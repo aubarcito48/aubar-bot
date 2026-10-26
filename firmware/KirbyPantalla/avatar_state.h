@@ -11,6 +11,13 @@ class AvatarState {
   constexpr float openness() const { return expression().blinks ? blink_.openness() : 1.0f; }
   constexpr void framePresented(uint32_t now) { blink_.framePresented(now); }
 
+  constexpr void nextExpression(uint32_t now) {
+    expressionId_ = static_cast<AvatarExpressionId>(
+        (static_cast<uint8_t>(expressionId_) + 1) %
+        static_cast<uint8_t>(AvatarExpressionId::Count));
+    blink_.reset(now);
+  }
+
   // BOOT is only sampled as an input after startup. Debounce both edges and
   // advance once per press, never repeatedly while the button is held.
   constexpr bool update(uint32_t now, bool buttonDown) {
@@ -22,10 +29,7 @@ class AvatarState {
         static_cast<uint32_t>(now - buttonChangedAt_) >= 40) {
       stableButtonDown_ = buttonDown;
       if (buttonDown) {
-        expressionId_ = static_cast<AvatarExpressionId>(
-            (static_cast<uint8_t>(expressionId_) + 1) %
-            static_cast<uint8_t>(AvatarExpressionId::Count));
-        blink_.reset(now);
+        nextExpression(now);
         return true;
       }
     }
