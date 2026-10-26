@@ -21,24 +21,24 @@ try {
     $kirbyPort.Write("`nPING`n")
     $synchronized = $false
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
-        if ($kirbyPort.ReadLine().TrimEnd([char[]]"`r`n") -eq 'OK PONG 1') {
+        if ($kirbyPort.ReadLine().TrimEnd([char[]]"`r`n") -eq 'OK PONG 2') {
             $synchronized = $true
             break
         }
     }
     if (-not $synchronized) { throw 'Could not synchronize the USB protocol.' }
     $cases = @(
-        @('PING', 'OK PONG 1'),
-        @('EXPRESSION neutral', 'OK VALIDATED EXPRESSION neutral'),
-        @('EXPRESSION contento', 'OK VALIDATED EXPRESSION contento'),
-        @('EXPRESSION sorprendido', 'OK VALIDATED EXPRESSION sorprendido'),
-        @('EXPRESSION dormido', 'OK VALIDATED EXPRESSION dormido'),
-        @('EXPRESSION enojado', 'OK VALIDATED EXPRESSION enojado'),
-        @('LOOK izquierda', 'OK VALIDATED LOOK izquierda'),
-        @('LOOK centro', 'OK VALIDATED LOOK centro'),
-        @('LOOK derecha', 'OK VALIDATED LOOK derecha'),
-        @('MODE manual', 'OK VALIDATED MODE manual'),
-        @('MODE auto', 'OK VALIDATED MODE auto'),
+        @('PING', 'OK PONG 2'),
+        @('EXPRESSION neutral', 'OK APPLIED EXPRESSION neutral'),
+        @('EXPRESSION contento', 'OK APPLIED EXPRESSION contento'),
+        @('EXPRESSION sorprendido', 'OK APPLIED EXPRESSION sorprendido'),
+        @('EXPRESSION dormido', 'OK APPLIED EXPRESSION dormido'),
+        @('EXPRESSION enojado', 'OK APPLIED EXPRESSION enojado'),
+        @('LOOK izquierda', 'OK APPLIED LOOK izquierda'),
+        @('LOOK centro', 'OK APPLIED LOOK centro'),
+        @('LOOK derecha', 'OK APPLIED LOOK derecha'),
+        @('MODE manual', 'OK APPLIED MODE manual'),
+        @('MODE auto', 'OK APPLIED MODE auto'),
         @('LOOK arriba', 'ERR INVALID_ARGUMENT'),
         @('EXPRESSION', 'ERR INVALID_ARGUMENT'),
         @('PING extra', 'ERR INVALID_ARGUMENT'),
@@ -62,7 +62,7 @@ try {
     $kirbyChecks++
     $kirbyPort.ReadTimeout = 3000
     $kirbyPort.Write("SSION neutral`r`n")
-    Assert-KirbyResponse 'OK VALIDATED EXPRESSION neutral'
+    Assert-KirbyResponse 'OK APPLIED EXPRESSION neutral'
 
     $binary = [byte[]](80, 73, 78, 71, 0, 10)
     $kirbyPort.Write($binary, 0, $binary.Length)
@@ -74,14 +74,14 @@ try {
     Assert-KirbyResponse 'ERR LINE_TOO_LONG'
     $kirbyPort.Write(('X' * 1000) + "PING`nPING`n")
     Assert-KirbyResponse 'ERR LINE_TOO_LONG'
-    Assert-KirbyResponse 'OK PONG 1'
+    Assert-KirbyResponse 'OK PONG 2'
 
     # Check recovery repeatedly while the production animation loop runs.
     for ($index = 0; $index -lt 20; $index++) {
         $kirbyPort.Write("LOOK arriba`n")
         Assert-KirbyResponse 'ERR INVALID_ARGUMENT'
         $kirbyPort.Write("PING`n")
-        Assert-KirbyResponse 'OK PONG 1'
+        Assert-KirbyResponse 'OK PONG 2'
     }
     Write-Output "TK15 USB PASS: $kirbyChecks checks on $Port."
 }

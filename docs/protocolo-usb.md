@@ -17,6 +17,7 @@ La PC debe esperar una respuesta completa antes de enviar el siguiente mensaje.
 | Mensaje | Significado |
 | --- | --- |
 | `PING` | Consultar disponibilidad y versión del protocolo |
+| `STATUS` | Consultar modo, expresión y mirada seleccionados |
 | `EXPRESSION neutral` | Seleccionar expresión neutral |
 | `EXPRESSION contento` | Seleccionar expresión contenta |
 | `EXPRESSION sorprendido` | Seleccionar expresión sorprendida |
@@ -28,16 +29,46 @@ La PC debe esperar una respuesta completa antes de enviar el siguiente mensaje.
 | `MODE manual` | Seleccionar modo manual |
 | `MODE auto` | Seleccionar demostración automática |
 
-## Respuestas de TK15
+## Respuestas — versión 2
 
-`PING` responde `OK PONG 1`, donde `1` es la versión del protocolo.
-Los comandos de control válidos responden `OK VALIDATED`, seguido del comando
-y argumento, por ejemplo: `OK VALIDATED EXPRESSION enojado`.
+`PING` responde `OK PONG 2`, donde `2` es la versión del protocolo.
+Los comandos de control válidos responden `OK APPLIED`, seguido del comando
+y argumento, por ejemplo: `OK APPLIED EXPRESSION enojado`.
 
-**VALIDATED confirma recepción y validación, no un cambio visual.** TK15 deja el
-comando tipado disponible para la aplicación. La aplicación de expresiones,
-miradas y modos, incluidas sus reglas de prioridad, corresponde a TK16.
-En esta etapa la demo y BOOT continúan funcionando sin cambios.
+**APPLIED confirma que se aplicó el estado lógico de destino.** La transición
+visual sigue ejecutándose sin bloquear: expresiones en 450 ms y miradas en 350 ms.
+Repetir la expresión actual no reinicia su parpadeo.
+
+`STATUS` devuelve una línea con este formato y orden de campos:
+
+```text
+OK STATUS mode=manual expression=enojado look=izquierda
+```
+
+Los valores de `mode`, `expression` y `look` son los de los comandos anteriores.
+La mirada informada es el destino efectivo, no la posición de un cuadro
+intermedio durante una transición. Consultar `STATUS` o `PING` no cambia el
+modo ni reinicia los temporizadores.
+
+La versión 1 de TK15 respondía `VALIDATED` sin aplicar acciones. Los clientes
+deben usar las respuestas de la versión 2 para este firmware.
+
+## Reglas de control
+
+- Al encender, arranca la demo en modo automático desde neutral y centro.
+- `EXPRESSION` y `LOOK` activan el modo manual y conservan la otra selección.
+- `MODE manual` congela la expresión y el destino de mirada actuales.
+- En manual, la demo y las miradas periódicas quedan detenidas; el parpadeo
+  sigue activo en las expresiones despiertas.
+- Dormido mantiene los ojos cerrados y centrados. Una mirada manual solicitada
+  se conserva para cuando se seleccione una expresión despierta.
+- `MODE auto` reinicia la demo desde neutral y centro, con un nuevo intervalo
+  de 12 segundos. Esto también ocurre si ya estaba en automático.
+- BOOT avanza una expresión en ambos modos. En automático reinicia el tiempo
+  de esa expresión; en manual conserva el modo y la mirada solicitada.
+- Si un comando USB coincide con BOOT o un cambio automático, USB tiene prioridad.
+- Cerrar la conexión USB conserva el modo seleccionado. RESET vuelve a iniciar
+  el modo automático.
 
 Cada respuesta termina en LF. El puerto se reserva para el protocolo:
 no intercala mensajes de depuración ni anuncios al arrancar.
@@ -66,7 +97,7 @@ El tiempo de espera de escritura del controlador USB se configura a cero.
 Si la PC deja de leer, se pausa la recepción del protocolo y las animaciones
 siguen actualizándose. No hay espera por la conexión ni por el fin de una línea.
 Al conectar un cliente puede enviarse LF y luego `PING`, descartando las respuestas
-anteriores hasta recibir `OK PONG 1`, para terminar una línea que otro cliente
+anteriores hasta recibir `OK PONG 2`, para terminar una línea que otro cliente
 hubiera dejado incompleta. Esta sincronización no cambia el estado del avatar.
 
 ## Prueba manual
@@ -75,8 +106,12 @@ Cerrar cualquier otra herramienta que use el puerto. Desde el monitor serie
 de Arduino IDE, seleccionar el puerto de la placa, 115200 baudios y fin de línea
 **Nueva línea** o **Ambos NL y CR**.
 
-Enviar `PING`: debe responder `OK PONG 1`.
-Enviar `EXPRESSION enojado`: debe responder `OK VALIDATED EXPRESSION enojado`.
+Enviar `PING`: debe responder `OK PONG 2`.
+Enviar `EXPRESSION enojado`: debe responder `OK APPLIED EXPRESSION enojado`
+y activar la expresión en modo manual.
+Enviar `LOOK izquierda` y después `STATUS`: debe informar
+`OK STATUS mode=manual expression=enojado look=izquierda`.
+Enviar `MODE auto`: debe responder `OK APPLIED MODE auto` y reiniciar la demo.
 Enviar `LOOK arriba`: debe responder `ERR INVALID_ARGUMENT`.
 
 El número de puerto COM varía según la PC. El micrófono y la interpretación de
@@ -88,11 +123,18 @@ Desde PowerShell, en la raíz del proyecto y con el firmware cargado:
 
 ```powershell
 .\tools\test_usb_protocol.ps1 -Port COM3
+.\tools\test_avatar_control.ps1 -Port COM3
 ```
 
 La prueba abre el puerto, envía comandos válidos e inválidos, verifica respuestas,
 comprueba mensajes fragmentados y confirma recuperación después de una línea
-demasiado larga. Cerrar el monitor serie antes de ejecutarla.
+demasiado larga. La segunda prueba verifica la persistencia manual durante
+13 segundos y la reanudación automática durante otros 13; deja enojado mirando
+a la izquierda en manual para la comprobación visual. Cerrar el monitor serie
+antes de ejecutar las pruebas.
+
+`tests/AvatarControl/AvatarControl.ino` verifica las reglas del controlador
+durante la compilación, incluidos BOOT, prioridades, sueño y consultas.
 
 `tests/UsbProtocol/UsbProtocol.ino` prueba el parser y el transporte con un puerto
 simulado, incluidos límites de procesamiento y respuestas enviadas byte a byte

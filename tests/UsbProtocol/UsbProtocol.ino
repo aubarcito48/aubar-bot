@@ -51,13 +51,14 @@ void testCommands() {
   check(line(parser, "MODE auto\n") == UsbParseResult::Valid && parser.command().mode == UsbMode::Auto);
   check(line(parser, "PI") == UsbParseResult::Incomplete);
   check(line(parser, "NG\r\n") == UsbParseResult::Valid && parser.command().type == UsbCommandType::Ping);
+  check(line(parser, "STATUS\n") == UsbParseResult::Valid && parser.command().type == UsbCommandType::Status);
 }
 
 void testInvalidLinesAndRecovery() {
   UsbProtocol parser;
   check(line(parser, "EXPRESSION enojado\n") == UsbParseResult::Valid);
   const char* invalid[] = {"EXPRESSION\n", "EXPRESSION contento extra\n", "LOOK arriba\n",
-      "MODE falso\n", "PING extra\n", "LOOK  centro\n", "LOOK centro \n"};
+      "MODE falso\n", "PING extra\n", "STATUS extra\n", "LOOK  centro\n", "LOOK centro \n"};
   for (const char* message : invalid) check(line(parser, message) == UsbParseResult::InvalidArgument);
   check(parser.command().expression == AvatarExpressionId::Angry);
   check(line(parser, "HELLO\n") == UsbParseResult::UnknownCommand);
@@ -77,20 +78,22 @@ void testInvalidLinesAndRecovery() {
 
 void testTransportBackpressureAndBudget() {
   UsbControl usb;
+  AvatarController controller;
   FakePort port;
   const char input[] = "EXPRESSION enojado\nPING\n";
   port.inputBytes(input, strlen(input));
-  check(usb.poll(port));  // Valid command, even though the PC cannot read yet.
+  check(usb.poll(port, controller, 0));  // Applied even though the PC cannot read yet.
   check(usb.command().expression == AvatarExpressionId::Angry);
+  check(controller.avatar().expressionId() == AvatarExpressionId::Angry && controller.mode() == UsbMode::Manual);
   const size_t stoppedAt = port.position;
-  for (int i = 0; i < 10; ++i) check(!usb.poll(port) && port.position == stoppedAt);
+  for (int i = 0; i < 10; ++i) check(!usb.poll(port, controller, 0) && port.position == stoppedAt);
   int commands = 1;
   for (int i = 0; i < 100; ++i) {
     port.room = 1;  // Force responses to span many polls.
-    if (usb.poll(port)) ++commands;
+    if (usb.poll(port, controller, 0)) ++commands;
   }
   check(commands == 2);
-  check(strcmp(port.output, "OK VALIDATED EXPRESSION enojado\nOK PONG 1\n") == 0);
+  check(strcmp(port.output, "OK APPLIED EXPRESSION enojado\nOK PONG 2\n") == 0);
 
   UsbControl flooded;
   FakePort floodPort;
@@ -99,15 +102,16 @@ void testTransportBackpressureAndBudget() {
   floodPort.inputBytes(flood, sizeof(flood));
   while (floodPort.available()) {
     const size_t before = floodPort.position;
-    check(!flooded.poll(floodPort));
+    check(!flooded.poll(floodPort, controller, 0));
     check(floodPort.position-before <= 128);
   }
   const char recovery[] = "\nPING\n";
   floodPort.inputBytes(recovery, strlen(recovery));
   floodPort.room = 200;
-  check(!flooded.poll(floodPort));
-  check(flooded.poll(floodPort));
-  check(strcmp(floodPort.output, "ERR LINE_TOO_LONG\nOK PONG 1\n") == 0);
+  check(!flooded.poll(floodPort, controller, 0));
+  check(flooded.poll(floodPort, controller, 0));
+  check(strcmp(floodPort.output, "ERR LINE_TOO_LONG\nOK PONG 2\n") == 0);
+  check(controller.avatar().expressionId() == AvatarExpressionId::Angry);
 }
 
 void setup() {

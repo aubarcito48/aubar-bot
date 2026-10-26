@@ -3,7 +3,7 @@
 #include <string.h>
 #include "avatar_types.h"
 
-enum class UsbCommandType { Ping, Expression, Look, Mode };
+enum class UsbCommandType { Ping, Status, Expression, Look, Mode };
 enum class UsbLook { Left, Center, Right };
 enum class UsbMode { Manual, Auto };
 enum class UsbParseResult { Incomplete, Valid, Empty, UnknownCommand, InvalidArgument,
@@ -51,6 +51,9 @@ class UsbProtocol {
     if (strcmp(buffer_, "PING") == 0) {
       if (argument) return UsbParseResult::InvalidArgument;
       parsed.type = UsbCommandType::Ping;
+    } else if (strcmp(buffer_, "STATUS") == 0) {
+      if (argument) return UsbParseResult::InvalidArgument;
+      parsed.type = UsbCommandType::Status;
     } else if (strcmp(buffer_, "EXPRESSION") == 0) {
       parsed.type = UsbCommandType::Expression;
       if (!argument) return UsbParseResult::InvalidArgument;

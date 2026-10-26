@@ -11,9 +11,7 @@
 // Frontal expressions adapted from the original Avatar Lab export.
 // This does not execute Avatar Lab's web animation engine.
 static uint16_t scanline[LCD_WIDTH];
-static AvatarState avatar;
-static GazeAnimation gaze;
-static DemoSequence demo;
+static AvatarController controller;
 static UsbControl usb;
 static ExpressionTransition expressionTransition(avatarExpression(AvatarExpressionId::Neutral));
 static GazeTransition gazeTransition;
@@ -25,7 +23,8 @@ static bool gazePendingPresentation = false;
 constexpr int EXPRESSION_BUTTON_PIN = 0;  // Waveshare BOOT, active low.
 
 void drawAvatar(float openness) {
-  const float gazeOffset = avatarGazeOffset(avatar.expression(), gaze.offset());
+  const auto& avatar = controller.avatar();
+  const float gazeOffset = avatarGazeOffset(avatar.expression(), controller.gazeOffset());
   // Stream one row at a time: no full-screen buffer or microSD needed.
   for (int y = 0; y < LCD_HEIGHT; ++y) {
     for (int x = 0; x < LCD_WIDTH; ++x) {
@@ -45,29 +44,28 @@ void setup() {
   pinMode(EXPRESSION_BUTTON_PIN, INPUT_PULLUP);
   LCD_Init();
   Set_Backlight(70);
-  drawAvatar(avatar.openness());
+  drawAvatar(controller.avatar().openness());
   // Prepare the static silhouette before the first animation starts.
-  renderFaceFrame(facePixels, avatar.expression(), avatar.openness(), 0);
-  avatar.framePresented(millis());
-  gaze.reset(millis());
-  demo.reset(millis());
+  renderFaceFrame(facePixels, controller.avatar().expression(), controller.avatar().openness(), 0);
+  controller.start(millis());
 }
 
 void loop() {
-  // TK15 validates and acknowledges messages; TK16 applies typed commands.
-  usb.poll(Serial);
   const uint32_t now = millis();
+  const auto& avatar = controller.avatar();
   const auto previousExpression = avatar.expressionId();
-  bool faceChanged = avatar.update(now, digitalRead(EXPRESSION_BUTTON_PIN) == LOW);
-  const bool manualChange = avatar.expressionId() != previousExpression;
-  if (demo.update(now, avatar, manualChange)) faceChanged = true;
+  const float previousGaze = controller.gazeOffset();
+  const float previousOpenness = avatar.openness();
+  bool faceChanged = controller.update(now, digitalRead(EXPRESSION_BUTTON_PIN) == LOW);
+  // USB takes priority if a physical button or a demo tick coincides with it.
+  usb.poll(Serial, controller, now);
   const bool expressionChanged = avatar.expressionId() != previousExpression;
+  faceChanged = faceChanged || expressionChanged || avatar.openness() != previousOpenness;
   if (expressionChanged) {
     expressionTransition.setTarget(avatar.expression(), now);
-    gaze.reset(now);
   }
-  const bool gazeChanged = gaze.update(now, avatar.expression().blinks);
-  if (gazeChanged || expressionChanged) gazeTransition.setTarget(gaze.offset(), now);
+  const bool gazeChanged = controller.gazeOffset() != previousGaze;
+  if (gazeChanged || expressionChanged) gazeTransition.setTarget(controller.gazeOffset(), now);
   if (faceChanged || gazeChanged) {
     needsFrame = true;
     blinkPendingPresentation = blinkPendingPresentation || faceChanged;
@@ -83,8 +81,8 @@ void loop() {
     lastFrameAt = now;
     needsFrame = expressionTransition.active(now) || gazeTransition.active(now);
     // Only a logical phase change restarts its hold, not every tween frame.
-    if (blinkPendingPresentation) avatar.framePresented(millis());
-    if (gazePendingPresentation) gaze.framePresented(millis());
+    if (blinkPendingPresentation) controller.framePresented(millis());
+    if (gazePendingPresentation) controller.gazeFramePresented(millis());
     blinkPendingPresentation = false;
     gazePendingPresentation = false;
   }

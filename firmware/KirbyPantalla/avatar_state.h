@@ -11,11 +11,16 @@ class AvatarState {
   constexpr float openness() const { return expression().blinks ? blink_.openness() : 1.0f; }
   constexpr void framePresented(uint32_t now) { blink_.framePresented(now); }
 
-  constexpr void nextExpression(uint32_t now) {
-    expressionId_ = static_cast<AvatarExpressionId>(
-        (static_cast<uint8_t>(expressionId_) + 1) %
-        static_cast<uint8_t>(AvatarExpressionId::Count));
+  constexpr void selectExpression(AvatarExpressionId id, uint32_t now) {
+    if (id == expressionId_ || id >= AvatarExpressionId::Count) return;
+    expressionId_ = id;
     blink_.reset(now);
+  }
+
+  constexpr void nextExpression(uint32_t now) {
+    selectExpression(static_cast<AvatarExpressionId>(
+        (static_cast<uint8_t>(expressionId_) + 1) %
+        static_cast<uint8_t>(AvatarExpressionId::Count)), now);
   }
 
   // BOOT is only sampled as an input after startup. Debounce both edges and

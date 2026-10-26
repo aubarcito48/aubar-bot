@@ -2,21 +2,24 @@
 #include <stdio.h>
 #include "usb_protocol.h"
 #include "avatar_data.h"
+#include "avatar_controller.h"
 
 class UsbControl {
  public:
   const UsbCommand& command() const { return protocol_.command(); }
 
   // Stream-like interface also permits testing with a bounded fake serial port.
-  // Return one typed command at a time for the application layer (TK16).
+  // Apply one typed command before acknowledging it. The animation loop still
+  // owns drawing; APPLIED acknowledges the logical target, not a finished tween.
   template <typename Port>
-  bool poll(Port& port) {
+  bool poll(Port& port, AvatarController& controller, uint32_t now) {
     flush(port);
     if (sent_ < responseLength_) return false;
     for (size_t budget = 0; budget < 128 && port.available() > 0; ++budget) {
       const UsbParseResult result = protocol_.feed(static_cast<char>(port.read()));
       if (result == UsbParseResult::Incomplete) continue;
-      makeResponse(result);
+      if (result == UsbParseResult::Valid) controller.apply(command(), now);
+      makeResponse(result, controller);
       flush(port);
       return result == UsbParseResult::Valid;
     }
@@ -33,7 +36,7 @@ class UsbControl {
     sent_ += port.write(reinterpret_cast<const uint8_t*>(response_+sent_), count);
   }
 
-  void makeResponse(UsbParseResult result) {
+  void makeResponse(UsbParseResult result, const AvatarController& controller) {
     const char* response = nullptr;
     switch (result) {
       case UsbParseResult::Empty: response = "ERR EMPTY\n"; break;
@@ -48,15 +51,21 @@ class UsbControl {
       const auto& cmd = command();
       switch (cmd.type) {
         case UsbCommandType::Ping:
-          snprintf(response_, sizeof(response_), "OK PONG 1\n"); break;
+          snprintf(response_, sizeof(response_), "OK PONG 2\n"); break;
+        case UsbCommandType::Status:
+          snprintf(response_, sizeof(response_), "OK STATUS mode=%s expression=%s look=%s\n",
+                   controller.mode() == UsbMode::Manual ? "manual" : "auto",
+                   controller.avatar().expression().name,
+                   controller.look() == UsbLook::Left ? "izquierda" :
+                   controller.look() == UsbLook::Right ? "derecha" : "centro"); break;
         case UsbCommandType::Expression:
-          snprintf(response_, sizeof(response_), "OK VALIDATED EXPRESSION %s\n",
+          snprintf(response_, sizeof(response_), "OK APPLIED EXPRESSION %s\n",
                    avatarExpression(cmd.expression).name); break;
         case UsbCommandType::Look:
-          snprintf(response_, sizeof(response_), "OK VALIDATED LOOK %s\n",
+          snprintf(response_, sizeof(response_), "OK APPLIED LOOK %s\n",
                    cmd.look == UsbLook::Left ? "izquierda" : cmd.look == UsbLook::Right ? "derecha" : "centro"); break;
         case UsbCommandType::Mode:
-          snprintf(response_, sizeof(response_), "OK VALIDATED MODE %s\n",
+          snprintf(response_, sizeof(response_), "OK APPLIED MODE %s\n",
                    cmd.mode == UsbMode::Manual ? "manual" : "auto"); break;
       }
     }
