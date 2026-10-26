@@ -188,7 +188,7 @@ geometría frontal y la expresión neutral; no convierte el motor de animaciones
 
 ## Imágenes del prototipo
 
-<img src="docs/images/kirby-pantalla.png" alt="Fotografía del avatar en la pantalla de la Waveshare" width="300"><img src="docs/images/kirby-ojos-semicerrados-ilustracion.png" alt="Ilustración editada con IA: ojos a medio cerrar" width="240"><img src="docs/images/kirby-ojos-cerrados-ilustracion.png" alt="Ilustración editada con IA: ojos cerrados" width="240"> |
+<img src="docs/images/kirby-ojos-semicerrados-ilustracion.png" alt="Ilustración editada con IA: ojos a medio cerrar" width="240"><img src="docs/images/kirby-ojos-cerrados-ilustracion.png" alt="Ilustración editada con IA: ojos cerrados" width="240"><img src="docs/images/kirby-pantalla.png" alt="Fotografía del avatar en la pantalla de la Waveshare" width="240">
 
 
 ## Validación
