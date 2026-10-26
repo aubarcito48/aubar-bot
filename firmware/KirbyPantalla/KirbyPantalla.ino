@@ -1,10 +1,12 @@
 #include <Arduino.h>
 #include "Display_ST7789.h"
 #include "avatar_render.h"
+#include "blink_animation.h"
 
 // First prototype: the exported shape and colors, with a simple blink.
 // This does not execute Avatar Lab's web animation engine.
 static uint16_t scanline[LCD_WIDTH];
+static BlinkAnimation blink;
 
 void drawAvatar(float openness) {
   // Stream one row at a time: no full-screen buffer or microSD needed.
@@ -23,17 +25,14 @@ void setup() {
   Serial.begin(115200);
   LCD_Init();
   Set_Backlight(70);
-  drawAvatar(1.0f);
+  drawAvatar(blink.openness());
+  blink.framePresented(millis());
   Serial.println("Kirby listo. ESP32-S3-LCD-1.47B");
 }
 
 void loop() {
-  delay(3500);
-  drawAvatar(0.45f);
-  delay(30);
-  drawAvatar(0.05f);
-  delay(80);
-  drawAvatar(0.45f);
-  delay(30);
-  drawAvatar(1.0f);
+  if (blink.update(millis())) {
+    drawAvatar(blink.openness());
+    blink.framePresented(millis());
+  }
 }
