@@ -6,6 +6,7 @@
 #include "avatar_transition.h"
 #include "avatar_frame.h"
 #include "demo_sequence.h"
+#include "usb_control.h"
 
 // Frontal expressions adapted from the original Avatar Lab export.
 // This does not execute Avatar Lab's web animation engine.
@@ -13,6 +14,7 @@ static uint16_t scanline[LCD_WIDTH];
 static AvatarState avatar;
 static GazeAnimation gaze;
 static DemoSequence demo;
+static UsbControl usb;
 static ExpressionTransition expressionTransition(avatarExpression(AvatarExpressionId::Neutral));
 static GazeTransition gazeTransition;
 static uint16_t facePixels[FACE_WIDTH * FACE_HEIGHT];
@@ -37,6 +39,8 @@ void drawAvatar(float openness) {
 }
 
 void setup() {
+  Serial.setRxBufferSize(2048);
+  Serial.setTxTimeoutMs(0);
   Serial.begin(115200);
   pinMode(EXPRESSION_BUTTON_PIN, INPUT_PULLUP);
   LCD_Init();
@@ -47,11 +51,11 @@ void setup() {
   avatar.framePresented(millis());
   gaze.reset(millis());
   demo.reset(millis());
-  Serial.println("Kirby listo. Demo automatica: neutral > contento > sorprendido > dormido > enojado");
-  Serial.println("BOOT: avanzar expresion y reiniciar su tiempo");
 }
 
 void loop() {
+  // TK15 validates and acknowledges messages; TK16 applies typed commands.
+  usb.poll(Serial);
   const uint32_t now = millis();
   const auto previousExpression = avatar.expressionId();
   bool faceChanged = avatar.update(now, digitalRead(EXPRESSION_BUTTON_PIN) == LOW);
@@ -59,8 +63,6 @@ void loop() {
   if (demo.update(now, avatar, manualChange)) faceChanged = true;
   const bool expressionChanged = avatar.expressionId() != previousExpression;
   if (expressionChanged) {
-    Serial.print("Expresion: ");
-    Serial.println(avatar.expression().name);
     expressionTransition.setTarget(avatar.expression(), now);
     gaze.reset(now);
   }
