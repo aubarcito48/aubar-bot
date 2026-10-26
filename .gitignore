@@ -1,0 +1,39 @@
+# Ejemplos y bibliotecas descargados de Waveshare (ver enlaces en readme.md).
+/referencias/
+
+# Resultados de compilacion de Arduino / ESP32.
+/build/
+**/build/
+/.pio/
+*.bin
+*.elf
+*.map
+*.o
+*.a
+*.d
+*.hex
+
+# Cache de Python y entornos locales.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Dependencias y resultados de futuras herramientas web.
+node_modules/
+/dist/
+
+# Credenciales locales. Las plantillas si se pueden versionar.
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Archivos temporales del sistema y editores.
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+*.tmp
+*.swp
+*~
