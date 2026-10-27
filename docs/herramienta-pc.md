@@ -224,8 +224,12 @@ y frases conversacionales. Ejemplos:
 | «Cómo estás» sin el nombre | No se activa una consulta. |
 | «Aubar» sin otra palabra | No genera una consulta ni una acción. |
 
-Las consultas requieren **«Aubar» tanto en captura manual como automática**.
-Los comandos manuales conservan sus formas anteriores sin exigir el nombre.
+Las consultas requieren **«Aubar» en la escucha automática**. En captura
+manual, mantener pulsado el botón ya activa la consulta: se puede decir
+directamente «contame algo interesante» sin el nombre. Los comandos manuales
+conservan sus formas anteriores sin exigirlo. Si se dice el nombre y el audio
+permite verificarlo, se retira de la consulta; en caso contrario se conserva
+la transcripción completa, sin tratar palabras como «ahogar» como alias.
 El nombre se verifica con el audio, sin convertir «ayudar» en un alias de texto.
 Se admite una pausa de hasta 0,6 segundos después del nombre dentro de la misma
 frase; una pausa de 0,8 segundos termina la captura. La comprobación también

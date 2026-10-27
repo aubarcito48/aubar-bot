@@ -35,12 +35,21 @@ class QueryRecognitionTests(unittest.TestCase):
             self.assertIsNone(unclear.query)
         self.assertEqual(self.recognize('contento',automatic=False).action.argument,'contento')
 
-    def test_queries_require_activation_and_a_body_in_both_capture_modes(self):
-        for automatic in (True,False):
-            for phrase in ('como estas','contame algo interesante','kirby como estas','aubar','au bar','a un bar'):
-                recognized=self.recognize(phrase,automatic=automatic)
-                self.assertIsNone(recognized.action)
-                self.assertIsNone(recognized.query)
+    def test_automatic_queries_require_activation_and_a_body(self):
+        for phrase in ('como estas','contame algo interesante','kirby como estas','aubar','au bar','a un bar'):
+            recognized=self.recognize(phrase)
+            self.assertIsNone(recognized.action)
+            self.assertIsNone(recognized.query)
+
+    def test_manual_button_activates_queries_without_inventing_a_wake_alias(self):
+        for phrase in ('como estas','contame algo interesante','ahogar contame algo interesante',
+                       'que significa ahogar','no te pongas enojado'):
+            recognized=self.recognize(phrase,automatic=False)
+            self.assertIsNone(recognized.action)
+            self.assertEqual(recognized.query,phrase)
+            self.assertIsNone(self.recognize(phrase).query)
+        for phrase in ('aubar','au bar','a un bar'):
+            self.assertIsNone(self.recognize(phrase,automatic=False).query)
 
     def test_unclear_nonfinite_and_oversized_queries_are_discarded(self):
         for confidence in (.2,.4,float('nan')):

@@ -123,6 +123,15 @@ El usuario confirmó con su micrófono que «Aubar, contento» vuelve a ejecutar
 el comando y responder con Dora, y que «Aubar, cómo estás» se identifica como
 consulta después de la corrección del inicio de captura.
 
+En captura manual, mantener pulsado el botón también activa las consultas:
+se puede decir «contame algo interesante» sin el nombre. La escucha automática
+mantiene la verificación de «Aubar». Una palabra mal transcrita como «ahogar»
+no se agrega como alias ni se elimina de una consulta sin verificarla.
+Este ajuste pasó **152 pruebas** y se comprobó con Vosk real y una captura
+manual sintética desde el panel, sin consultas a Groq.
+El usuario confirmó que «contame algo interesante» se identifica como consulta
+al mantener pulsado el botón, sin decir el nombre.
+
 Validación del cliente del 27 de octubre de 2026: **139 pruebas aprobadas**,
 `pip check` correcto y una consulta real desde el panel usando la configuración
 local. Se comprobó el funcionamiento de Tk y COM3 y que los controles de IA

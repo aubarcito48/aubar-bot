@@ -68,7 +68,20 @@ class LocalRecognizer:
         action = match_command(text)
         if action is not None:
             return RecognitionResult(text,action,action.label)
-        return self._automatic_result(recording,text,words)
+        activated=self._automatic_result(recording,text,words)
+        if activated.query is not None:
+            return activated
+        # Holding the manual button is explicit activation. A missed proper
+        # name must not reject an otherwise clear question in push-to-talk.
+        # Keep the full transcript if the name cannot be verified; no aliases.
+        if normalize(text) in ('aubar','au bar','a un bar'):
+            return activated
+        if (any(not math.isfinite(value) or not 0<=value<=1 for value in confidences)
+            or min(confidences)<.35 or sum(confidences)/len(confidences)<.55):
+            return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la frase.')
+        if len(text)>1000:
+            return RecognitionResult(text,None,'La consulta es demasiado larga. Probá una frase más breve.')
+        return RecognitionResult(text,None,'Consulta reconocida. Todavía no se envía a Groq.',query=text)
 
     def _automatic_result(self, recording, text, words):
         rejected = RecognitionResult(text, None,

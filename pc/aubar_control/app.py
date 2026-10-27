@@ -536,7 +536,7 @@ class AubarApp:
         self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · «Aubar» + comando o pregunta",
             variable=self.auto_enabled, command=self.toggle_automatic)
         self.auto_check.pack(anchor="w")
-        ttk.Label(modes, text="Automática: hablá y hacé una pausa. Manual: mantené pulsado el botón.",
+        ttk.Label(modes, text="Automática: empezá con «Aubar». Manual: mantené pulsado y preguntá sin decir el nombre.",
                   style="Muted.TLabel", wraplength=650).pack(anchor="w", pady=(6, 0))
         self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",
                                      activebackground="#f2aedc", font=("Segoe UI", 13, "bold"),
