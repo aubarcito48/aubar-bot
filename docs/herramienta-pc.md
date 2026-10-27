@@ -128,7 +128,37 @@ heurística y no garantiza que toda transcripción sea correcta; el texto permit
 comprobar qué entendió. Se rechazan palabras con confianza menor a 0,35 o un
 promedio menor a 0,45. Una frase nueva borra la acción anterior.
 
-En TK19 las acciones **solo se muestran**: el envío al ESP32 corresponde a TK20.
+## Enviar acciones por voz
+
+Conectar primero el ESP32 en la pestaña **Dispositivo**. Luego, en **Micrófono**,
+mantener el botón, esperar **Escuchando**, decir una frase conocida y soltar.
+El panel muestra el texto, envía una sola orden y espera la respuesta exacta
+`OK APPLIED`. Después consulta `STATUS`, actualiza los valores y muestra
+**Confirmado por el ESP32**. La confirmación se refiere al destino lógico;
+la transición visual termina de ejecutarse en la placa.
+
+«Contento», «dormite» y las miradas activan el modo manual según las reglas del
+firmware. «Modo automático» reinicia la demo desde neutral y centro.
+Las frases desconocidas, el silencio y los resultados de baja confianza no envían
+órdenes ni reutilizan la acción de una captura anterior.
+
+La captura y el reconocimiento pueden probarse sin conectar la placa, pero la
+acción no se enviará después de conectar: hay que repetir la frase.
+Una captura iniciada en otra conexión tampoco se ejecuta tras reconectar.
+Si el USB está consultando el estado, la orden espera ese resultado en la misma
+conexión; no compite con otro hilo por el puerto.
+
+Si se pierde la respuesta, la orden puede haberse aplicado. El panel lo informa,
+cierra la conexión y **no reintenta automáticamente**. Si ya recibió la confirmación
+pero falla la consulta de estado, distingue ambos resultados. Reconectar,
+comprobar el estado y repetir la frase solamente si corresponde.
+
+Para validar desconexiones: retirar el cable, esperar el aviso del panel,
+volver a conectar y buscar el puerto si cambió. Una frase anterior no debe
+ejecutarse al reconectar. Volver a hablar para enviar una orden nueva.
+
+## Modelo local
+
 El modelo está en `models/`, excluido de Git; el lanzador permite descargarlo
 nuevamente. Las pruebas y la ejecución posterior a la instalación funcionan
 sin internet. El instalador usa la URL oficial y fija el SHA256

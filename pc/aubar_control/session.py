@@ -5,7 +5,7 @@ import time
 import serial
 from serial.tools import list_ports
 
-from .protocol import DeviceError, DeviceStatus, parse_status
+from .protocol import DeviceError, DeviceStatus, parse_status, encode_action
 
 
 @dataclass(frozen=True)
@@ -100,3 +100,22 @@ class DeviceSession:
         except (serial.SerialException, OSError) as exc:
             self.close()
             raise DeviceError("Se perdió la conexión USB. Revisá el cable y volvé a conectar.") from exc
+
+    def apply_action(self, action) -> DeviceStatus:
+        message = encode_action(action)
+        if not self.connected:
+            raise DeviceError('Conectá el ESP32 y repetí la orden de voz.')
+        acknowledged = False
+        try:
+            self._serial.write(message)
+            reply = self._readline(time.monotonic() + self._timeout)
+            expected = f'OK APPLIED {action.command} {action.argument}'
+            if reply != expected:
+                raise DeviceError('El ESP32 no confirmó la orden esperada.')
+            acknowledged = True
+            return self.status()
+        except (DeviceError, serial.SerialException, OSError) as exc:
+            self.close()
+            if acknowledged:
+                raise DeviceError('El ESP32 confirmó la orden, pero se perdió la consulta de estado. Reconectá para comprobarlo.') from exc
+            raise DeviceError('No se pudo confirmar la orden. Puede haberse aplicado; no se reenviará. Reconectá y comprobá el estado.') from exc

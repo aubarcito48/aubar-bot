@@ -45,6 +45,9 @@ class FakeRecognizer:
         from pc.aubar_control.recognition import RecognitionResult
         from pc.aubar_control.voice_commands import match_command
         self.result = RecognitionResult('contento', match_command('contento'), 'Expresión: contento')
+        self.gate = None
 
     def recognize(self, recording):
+        if self.gate:
+            self.gate.wait(2)
         return self.result

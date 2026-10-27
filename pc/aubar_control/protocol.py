@@ -12,6 +12,17 @@ class DeviceStatus:
     look: str
 
 
+def encode_action(action) -> bytes:
+    allowed = {
+        'EXPRESSION': {'neutral', 'contento', 'sorprendido', 'dormido', 'enojado'},
+        'LOOK': {'izquierda', 'centro', 'derecha'},
+        'MODE': {'manual', 'auto'},
+    }
+    if action.command not in allowed or action.argument not in allowed[action.command]:
+        raise DeviceError('La acción reconocida no es un comando válido.')
+    return f'{action.command} {action.argument}\n'.encode('ascii')
+
+
 def parse_status(line: str) -> DeviceStatus:
     prefix = "OK STATUS "
     if not line.startswith(prefix):

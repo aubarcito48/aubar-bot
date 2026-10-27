@@ -44,6 +44,9 @@ class AubarApp:
         self.closed = False
         self.ports = {}
         self.active_port = None
+        self.connection_token = 0
+        self.capture_connection_token = None
+        self.pending_action = None
         self.port_value = tk.StringVar()
         self.banner_value = tk.StringVar(value="Buscando puertos…")
         self.values = {key: tk.StringVar(value="—") for key in ("expression", "mode", "look")}
@@ -165,7 +168,7 @@ class AubarApp:
         self.level_bar = ttk.Progressbar(panel, maximum=100, mode="determinate")
         self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 20))
         ttk.Label(panel, text="Se detiene a los 10 segundos o al salir de la ventana.\n"
-                  "Al soltar, la voz se reconoce en esta PC. Todavía no se envían acciones al ESP32.",
+                  "Al soltar, la frase válida se envía al ESP32 conectado y se muestra su confirmación.",
                   style="Muted.TLabel", wraplength=650).grid(row=6, column=0, columnspan=2, sticky="w")
         ttk.Label(panel, text="Lo que escuché", style="Section.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 8))
         tk.Label(panel, textvariable=self.recognition_text, bg="white", fg=INK,
@@ -209,6 +212,7 @@ class AubarApp:
             return "break"
         self.talk_button.focus_set()
         self.last_recording = None
+        self.capture_connection_token = self.connection_token if self.connected else None
         self.recognized_action = None
         self.recognition_text.set("Esperando la captura…")
         self.recognition_message.set("")
@@ -290,6 +294,14 @@ class AubarApp:
                     self.recognized_action = result.action
                     self.recognition_text.set(result.text or "—")
                     self.recognition_message.set(result.message)
+                    if result.action is not None:
+                        if self.connected and self.capture_connection_token == self.connection_token:
+                            self.pending_action = (self.connection_token, result.action)
+                            self.audio_phase = 'sending'
+                            self.recognition_message.set('Enviando la orden al ESP32…')
+                            self.talk_button.configure(text='Esperando confirmación…')
+                        else:
+                            self.recognition_message.set('Acción no enviada. Conectá el ESP32 y repetí la frase.')
                 if self.audio_phase == "idle":
                     self.talk_button.configure(text="Mantené pulsado para hablar")
                     self.level_bar['value'] = 0
@@ -349,12 +361,38 @@ class AubarApp:
 
     def connect(self):
         port = self.ports.get(self.port_value.get())
-        if port:
+        if port and not self.busy:
+            self._invalidate_connection()
             self._message(f"Conectando con {port.device}…")
             self._submit("connect", lambda: (port.device, self.session.connect(port.device)))
 
     def disconnect(self):
+        if self.busy:
+            return
+        self._invalidate_connection()
         self._submit("disconnect", self.session.close)
+
+    def _invalidate_connection(self):
+        self.connection_token += 1
+        if self.pending_action is not None or self.audio_phase == 'sending':
+            self.recognition_message.set('Orden descartada por desconexión. Reconectá y repetí la frase.')
+            self.audio_phase = 'idle'
+            self.talk_button.configure(text='Mantené pulsado para hablar')
+        self.pending_action = None
+        self._audio_controls()
+
+    def _dispatch_voice(self):
+        if self.pending_action is None or self.busy or self.closed:
+            return
+        token, action = self.pending_action
+        self.pending_action = None
+        if not self.connected or token != self.connection_token:
+            self.audio_phase = 'idle'
+            self.recognition_message.set('Acción no enviada. Reconectá y repetí la frase.')
+            self.talk_button.configure(text='Mantené pulsado para hablar')
+            self._audio_controls()
+            return
+        self._submit('voice', lambda: (token, action, self.session.apply_action(action)))
 
     def refresh_status(self):
         self._submit("status", self.session.status)
@@ -374,11 +412,14 @@ class AubarApp:
                 operation, result, error = self.events.get_nowait()
                 self.busy = False
                 if error:
+                    self._invalidate_connection()
                     self.connected = False
                     self.active_port = None
                     self._clear_state()
                     self._message(str(error), error=True)
                     self._log(str(error))
+                    if operation == 'voice':
+                        self.recognition_message.set(str(error))
                 elif operation == "ports":
                     previous = self.port_value.get()
                     self.ports = {port.label: port for port in result}
@@ -396,6 +437,15 @@ class AubarApp:
                     self._apply_status(result)
                     if operation == "status":
                         self._log("Estado del dispositivo actualizado.")
+                elif operation == 'voice':
+                    token, action, status = result
+                    if token == self.connection_token and self.connected:
+                        self._apply_status(status)
+                        self.recognition_message.set(f'{action.label}. Confirmado por el ESP32.')
+                        self._log(f'{action.label}. Confirmado por el ESP32.')
+                    self.audio_phase = 'idle'
+                    self.talk_button.configure(text='Mantené pulsado para hablar')
+                    self._audio_controls()
                 elif operation == "disconnect":
                     self.connected = False
                     self.active_port = None
@@ -406,11 +456,12 @@ class AubarApp:
         except Empty:
             pass
         self._drain_audio()
+        self._dispatch_voice()
         if not self.closed:
             self._events_timer = self.root.after(80, self._drain)
 
     def _poll(self):
-        if self.connected and not self.busy:
+        if self.connected and not self.busy and self.pending_action is None:
             self._submit("poll", self.session.status)
         if not self.closed:
             self._poll_timer = self.root.after(1500, self._poll)
@@ -419,6 +470,7 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.pending_action = None
         self.capture.cancel()
         self.last_recording = None
         self.root.after_cancel(self._events_timer)

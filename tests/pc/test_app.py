@@ -3,6 +3,7 @@ import time
 import tkinter as tk
 import unittest
 from array import array
+from dataclasses import replace
 from audio_fakes import FakeAudio, FakeRecognizer
 
 from pc.aubar_control.app import AubarApp
@@ -17,6 +18,8 @@ class FakeSession:
         self.fail = False
         self.port = None
         self.gate = None
+        self.actions = []
+        self.state = DeviceStatus('manual', 'enojado', 'izquierda')
 
     def connect(self, port):
         if self.gate:
@@ -27,7 +30,19 @@ class FakeSession:
     def status(self):
         if self.fail:
             raise DeviceError("Se perdió la conexión USB. Revisá el cable y volvé a conectar.")
-        return DeviceStatus("manual", "enojado", "izquierda")
+        return self.state
+
+    def apply_action(self, action):
+        if self.fail:
+            raise DeviceError('No se pudo confirmar la orden. No se reenviará.')
+        self.actions.append(action)
+        if action.command == 'EXPRESSION':
+            self.state = replace(self.state, mode='manual', expression=action.argument)
+        elif action.command == 'LOOK':
+            self.state = replace(self.state, mode='manual', look=action.argument)
+        else:
+            self.state = DeviceStatus('auto', 'neutral', 'centro') if action.argument == 'auto' else replace(self.state, mode='manual')
+        return self.state
 
     def close(self):
         self.port = None
@@ -49,6 +64,8 @@ class AppTests(unittest.TestCase):
     def tearDown(self):
         if self.session.gate:
             self.session.gate.set()
+        if self.recognizer.gate:
+            self.recognizer.gate.set()
         self.app.close()
 
     def pump(self, condition, timeout=2):
@@ -64,6 +81,11 @@ class AppTests(unittest.TestCase):
         self.assertIn('Preparando', self.app.audio_message.get())
         self.app.capture.ready.set()
         self.pump(lambda: self.app.audio_phase == 'recording')
+
+    def speak(self):
+        self.start_microphone()
+        self.audio.streams[-1].emit(array('h', [4000]*4000).tobytes())
+        self.app.stop_recording()
 
     def test_connect_status_disconnect_and_reconnect_to_new_port(self):
         self.assertTrue(self.app.port_value.get().startswith("COM3"))
@@ -156,6 +178,64 @@ class AppTests(unittest.TestCase):
         self.pump(lambda: self.app.audio_phase == 'idle')
         self.assertEqual(self.app.last_recording.duration, 10)
         self.assertTrue(self.audio.streams[-1].closed)
+
+    def test_voice_sends_once_and_updates_confirmed_state(self):
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.speak()
+        self.pump(lambda: self.app.audio_phase == 'idle' and not self.app.busy)
+        self.assertEqual(len(self.session.actions), 1)
+        self.assertEqual(self.app.values['expression'].get(), 'Contento')
+        self.assertIn('Confirmado por el ESP32', self.app.recognition_message.get())
+
+    def test_unknown_phrase_never_sends(self):
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.recognizer.result = RecognitionResult('hoy hace frio', None, 'Frase no reconocida como comando.')
+        self.speak()
+        self.pump(lambda: self.app.audio_phase == 'idle')
+        self.assertEqual(self.session.actions, [])
+
+    def test_capture_from_previous_connection_is_not_replayed(self):
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.recognizer.gate = threading.Event()
+        self.speak()
+        self.pump(lambda: self.app.audio_phase == 'recognizing')
+        self.app.disconnect()
+        self.pump(lambda: not self.app.busy)
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.recognizer.gate.set()
+        self.pump(lambda: self.app.audio_phase == 'idle')
+        self.assertEqual(self.session.actions, [])
+        self.assertIn('no enviada', self.app.recognition_message.get())
+
+    def test_failed_send_is_not_replayed_after_reconnect(self):
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.session.fail = True
+        self.speak()
+        self.pump(lambda: self.app.audio_phase == 'idle' and not self.app.busy)
+        self.assertFalse(self.app.connected)
+        self.assertIsNone(self.app.pending_action)
+        self.session.fail = False
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.assertEqual(self.session.actions, [])
+
+    def test_voice_waits_for_busy_usb_without_being_lost(self):
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        # Simulate an in-flight periodic query while recognition completes.
+        self.app.busy = True
+        self.speak()
+        self.pump(lambda: self.app.pending_action is not None)
+        self.assertEqual(self.session.actions, [])
+        self.app.busy = False
+        self.app._dispatch_voice()
+        self.pump(lambda: self.app.audio_phase == 'idle' and not self.app.busy)
+        self.assertEqual(len(self.session.actions), 1)
 
 
 if __name__ == "__main__":
