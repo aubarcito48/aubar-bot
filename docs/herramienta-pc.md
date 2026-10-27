@@ -242,7 +242,9 @@ Las poses dormidas conservan los ojos cerrados y también pueden orientarse.
 
 La pestaña **IA** permite revisar y recargar la configuración local de Groq.
 La [guía de configuración](groq.md) explica `.env`, el modelo y el tiempo de
-espera. Esta preparación todavía no envía consultas al servicio.
+espera. **Probar conexión** envía una pregunta breve y muestra la respuesta
+como texto, sin bloquear los controles locales. Abrir o recargar la
+configuración no envía consultas al servicio.
 
 ## Motor de salida de voz
 

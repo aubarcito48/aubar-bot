@@ -17,6 +17,7 @@ from .responses import confirmation_text
 from .playback_gate import PlaybackGate
 from .reply_queue import ReplyQueue
 from .config import load_groq_config
+from .groq_client import GroqService, GroqError, TEST_QUERY
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -27,9 +28,14 @@ PINK = "#ffc2e9"
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
                  capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None,
-                 reply_provider=confirmation_text, config_loader=load_groq_config):
+                 reply_provider=confirmation_text, config_loader=load_groq_config, ai_service=None):
         self.root = root
         self.config_loader=config_loader
+        self.ai_service=ai_service or GroqService()
+        self._ai_future=None
+        self.ai_generation=0
+        self._ai_request_generation=None
+        self.ai_message=tk.StringVar(value='Podés probar la conexión con Groq cuando la configuración esté lista.')
         self.groq_config=None
         self.groq_config_message=tk.StringVar()
         self.reload_groq_configuration()
@@ -190,27 +196,92 @@ class AubarApp:
         self._controls()
 
     def reload_groq_configuration(self):
+        self.ai_generation+=1
         state=self.config_loader()
         self.groq_config=state.config
         self.groq_config_message.set(state.message)
+        if hasattr(self,'ai_response'):
+            self._show_ai_response('')
+            self.ai_message.set('Configuración recargada. Iniciá una nueva prueba cuando esté disponible.')
+            self._ai_controls()
 
     def _build_ai_configuration(self,panel):
         panel.columnconfigure(0,weight=1)
         ttk.Label(panel,text="La conversación de Aubar",style="Section.TLabel").grid(
             row=0,column=0,sticky="w",pady=(0,12))
-        ttk.Label(panel,text="Configuración de Groq",style="Muted.TLabel").grid(
-            row=1,column=0,sticky="w",pady=(0,8))
         self.groq_config_status=ttk.Label(panel,textvariable=self.groq_config_message,
             wraplength=600)
-        self.groq_config_status.grid(row=2,column=0,sticky="ew",pady=(0,16))
-        ttk.Button(panel,text="Recargar configuración",command=self.reload_groq_configuration).grid(
-            row=3,column=0,sticky="w",pady=(0,20))
-        ttk.Label(panel,text="Guardá tu clave en GROQ_API_KEY dentro del archivo .env del proyecto. "
-            "La clave no se muestra en el panel. Después de guardar, recargá la configuración.",
-            style="Muted.TLabel",wraplength=600).grid(row=4,column=0,sticky="ew",pady=(0,16))
-        ttk.Label(panel,text="Esta etapa prepara la configuración. La conversación con Groq se habilitará "
-            "en las próximas tareas; los controles del avatar y la voz siguen disponibles.",
-            style="Muted.TLabel",wraplength=600).grid(row=5,column=0,sticky="ew")
+        self.groq_config_status.grid(row=1,column=0,sticky="ew",pady=(0,12))
+        buttons=ttk.Frame(panel)
+        buttons.grid(row=2,column=0,sticky="ew",pady=(0,12))
+        ttk.Button(buttons,text="Recargar configuración",command=self.reload_groq_configuration).pack(side="left",padx=(0,10))
+        self.ai_test_button=ttk.Button(buttons,text="Probar conexión",style="Primary.TButton",command=self.test_groq)
+        self.ai_test_button.pack(side="left")
+        ttk.Label(panel,text="Guardá tu clave en GROQ_API_KEY dentro de .env y recargá. "
+            "La clave no se muestra en el panel.",style="Muted.TLabel",wraplength=600).grid(
+            row=3,column=0,sticky="ew",pady=(0,12))
+        ttk.Label(panel,text="Respuesta de prueba",style="Section.TLabel").grid(
+            row=4,column=0,sticky="w",pady=(0,6))
+        response_frame=ttk.Frame(panel)
+        response_frame.grid(row=5,column=0,sticky="nsew")
+        response_frame.rowconfigure(0,weight=1);response_frame.columnconfigure(0,weight=1)
+        self.ai_response=tk.Text(response_frame,height=4,state="disabled",bg="white",fg=INK,
+            font=("Segoe UI",11),wrap="word",relief="flat",padx=12,pady=10)
+        self.ai_response.grid(row=0,column=0,sticky="nsew")
+        scrollbar=ttk.Scrollbar(response_frame,command=self.ai_response.yview)
+        scrollbar.grid(row=0,column=1,sticky="ns")
+        self.ai_response.configure(yscrollcommand=scrollbar.set)
+        panel.rowconfigure(5,weight=1)
+        ttk.Label(panel,textvariable=self.ai_message,wraplength=600).grid(
+            row=6,column=0,sticky="ew",pady=(10,6))
+        ttk.Label(panel,text="La prueba envía una pregunta breve por internet y muestra la respuesta como texto. "
+            "Podés usarla sin conectar la placa.",style="Muted.TLabel",wraplength=600).grid(
+            row=7,column=0,sticky="ew")
+        self._ai_controls()
+
+    def _ai_controls(self):
+        active=self._ai_future is not None or self.ai_service.busy
+        self.ai_test_button.configure(state="normal" if self.groq_config is not None and not active else "disabled")
+
+    def _show_ai_response(self,text):
+        self.ai_response.configure(state='normal')
+        self.ai_response.delete('1.0','end')
+        self.ai_response.insert('1.0',text)
+        self.ai_response.configure(state='disabled')
+
+    def test_groq(self):
+        if self.closed or self.groq_config is None or self._ai_future is not None or self.ai_service.busy:
+            return
+        self._show_ai_response('')
+        self._ai_request_generation=self.ai_generation
+        try:
+            self._ai_future=self.ai_service.submit(self.groq_config,TEST_QUERY)
+        except GroqError as error:
+            self.ai_message.set(str(error))
+        else:
+            self.ai_message.set('Consultando Groq… El panel sigue disponible.')
+        self._ai_controls()
+
+    def _drain_ai(self):
+        future=self._ai_future
+        if future is None or not future.done():
+            return
+        self._ai_future=None
+        stale=self._ai_request_generation!=self.ai_generation
+        try:
+            text=future.result()
+        except (CancelledError,GroqError) as error:
+            if not stale:
+                self.ai_message.set(str(error) if isinstance(error,GroqError) else 'La prueba fue cancelada.')
+        except Exception:
+            if not stale:
+                self.ai_message.set('No se pudo completar la prueba de Groq. Podés intentar nuevamente.')
+        else:
+            if not stale:
+                self._show_ai_response(text)
+                self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
+                self.ai_message.set('Conexión comprobada: Groq respondió usando el modelo configurado.')
+        self._ai_controls()
 
     def _build_speech(self, panel):
         panel.columnconfigure(0, weight=1)
@@ -923,6 +994,7 @@ class AubarApp:
         except Empty:
             pass
         self._drain_audio()
+        self._drain_ai()
         self._drain_speech()
         self._drain_reply()
         self._speech_controls()
@@ -942,6 +1014,9 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.ai_generation+=1
+        self._ai_future=None
+        self.ai_service.close()
         self.replies.cancel()
         self.speech.close()
         self.auto_enabled.set(False)
