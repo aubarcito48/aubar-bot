@@ -20,9 +20,11 @@ class AudioTests(unittest.TestCase):
     def test_release_gates_samples_immediately_and_finish_closes_stream(self):
         self.capture.arm()
         self.assertTrue(self.capture.start(1))
+        self.assertFalse(self.capture.ready.is_set())
         stream = self.backend.streams[-1]
         pcm = array('h', [12000, -12000]*4000).tobytes()
         stream.emit(pcm)
+        self.assertTrue(self.capture.ready.is_set())
         self.assertGreater(self.capture.level, 0)
         self.capture.cancel()
         stream.emit(pcm)  # Data after release must not enter the recording.

@@ -8,6 +8,7 @@ from tkinter import ttk
 from .protocol import DeviceError
 from .session import DeviceSession, available_ports
 from .audio import AudioError, MicrophoneCapture, available_inputs
+from .recognition import LocalRecognizer, RecognitionError
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -17,7 +18,7 @@ PINK = "#ffc2e9"
 
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
-                 capture=None, audio_provider=available_inputs):
+                 capture=None, audio_provider=available_inputs, recognizer=None):
         self.root = root
         self.session = session or DeviceSession()
         self.port_provider = port_provider
@@ -32,6 +33,10 @@ class AubarApp:
         self.audio_failed = False
         self.inputs = {}
         self.last_recording = None
+        self.recognizer = recognizer or LocalRecognizer()
+        self.recognized_action = None
+        self.recognition_text = tk.StringVar(value="Todavía no hay una frase reconocida.")
+        self.recognition_message = tk.StringVar(value="Probá: «contento», «dormite» o «mirá a la izquierda».")
         self.mic_value = tk.StringVar()
         self.audio_message = tk.StringVar(value="Buscando micrófonos…")
         self.connected = False
@@ -89,7 +94,7 @@ class AubarApp:
         notebook = ttk.Notebook(main)
         notebook.grid(row=1, column=0, sticky="nsew")
         device_tab = ttk.Frame(notebook, padding=16)
-        microphone_tab = ttk.Frame(notebook, padding=20)
+        microphone_tab = ttk.Frame(notebook, padding=16)
         notebook.add(device_tab, text="Dispositivo")
         notebook.add(microphone_tab, text="Micrófono")
         self._build_microphone(microphone_tab)
@@ -143,10 +148,10 @@ class AubarApp:
         self.mic_scan_button = ttk.Button(panel, text="Buscar micrófonos", command=self.refresh_microphones)
         self.mic_scan_button.grid(row=1, column=1)
         ttk.Label(panel, text="Mantené el botón pulsado mientras hablás. Soltalo para terminar.",
-                  wraplength=650).grid(row=2, column=0, columnspan=2, sticky="w", pady=(26, 14))
+                  wraplength=650).grid(row=2, column=0, columnspan=2, sticky="w", pady=(18, 14))
         self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",
                                      activebackground="#f2aedc", font=("Segoe UI", 15, "bold"),
-                                     relief="flat", padx=20, pady=24, takefocus=True)
+                                     relief="flat", padx=20, pady=18, takefocus=True)
         self.talk_button.grid(row=3, column=0, columnspan=2, sticky="ew")
         self.talk_button.bind("<ButtonPress-1>", self.start_recording)
         self.talk_button.bind("<KeyPress-space>", self.start_recording)
@@ -159,9 +164,14 @@ class AubarApp:
         self.audio_label.grid(row=4, column=0, columnspan=2, sticky="ew")
         self.level_bar = ttk.Progressbar(panel, maximum=100, mode="determinate")
         self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 20))
-        ttk.Label(panel, text="La captura se detiene a los 10 segundos o al salir de la ventana.\n"
-                  "El audio queda solo en memoria; todavía no se interpreta ni se envía al ESP32.",
+        ttk.Label(panel, text="Se detiene a los 10 segundos o al salir de la ventana.\n"
+                  "Al soltar, la voz se reconoce en esta PC. Todavía no se envían acciones al ESP32.",
                   style="Muted.TLabel", wraplength=650).grid(row=6, column=0, columnspan=2, sticky="w")
+        ttk.Label(panel, text="Lo que escuché", style="Section.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 8))
+        tk.Label(panel, textvariable=self.recognition_text, bg="white", fg=INK,
+                 font=("Segoe UI", 12), anchor="w", justify="left", wraplength=620,
+                 padx=12, pady=8, height=2).grid(row=8, column=0, columnspan=2, sticky="ew")
+        ttk.Label(panel, textvariable=self.recognition_message, wraplength=640).grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 0))
         self._audio_controls()
 
     def _audio_controls(self):
@@ -169,7 +179,7 @@ class AubarApp:
         self.mic_combo.configure(state="readonly" if idle else "disabled")
         self.mic_scan_button.configure(state="normal" if idle else "disabled")
         # Keep the button enabled during recording so it receives release events.
-        allowed = not self.audio_scan_busy and self.mic_value.get() in self.inputs
+        allowed = not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
         self.talk_button.configure(state="normal" if allowed else "disabled")
 
     def _audio_submit(self, operation, action):
@@ -177,7 +187,7 @@ class AubarApp:
             try:
                 self.audio_events.put((operation, action(), None))
             except Exception as error:
-                if not isinstance(error, AudioError):
+                if not isinstance(error, (AudioError, RecognitionError)):
                     logging.exception("Audio operation failed: %s", operation)
                     error = AudioError("No se pudo completar la captura. Revisá el micrófono.")
                 self.capture.cancel()
@@ -199,17 +209,20 @@ class AubarApp:
             return "break"
         self.talk_button.focus_set()
         self.last_recording = None
+        self.recognized_action = None
+        self.recognition_text.set("Esperando la captura…")
+        self.recognition_message.set("")
         self.capture.arm()
         self.audio_failed = False
         self.audio_phase = "starting"
-        self.audio_message.set("Abriendo micrófono… Soltá el botón para cancelar.")
+        self.audio_message.set("Preparando micrófono… Esperá a «Escuchando» para hablar.")
         self.talk_button.configure(text="Soltá para terminar")
         self._audio_controls()
         self._audio_submit("start", lambda: self.capture.start(device.index))
         return "break"
 
     def stop_recording(self, event=None):
-        if self.closed or self.audio_phase not in ("starting", "recording"):
+        if self.closed or self.audio_phase not in ("starting", "warming", "recording"):
             return
         self.capture.cancel()
         self.audio_phase = "stopping"
@@ -232,6 +245,9 @@ class AubarApp:
                     self.audio_phase = "idle"
                     self.audio_scan_busy = False
                     self.last_recording = None
+                    self.recognized_action = None
+                    self.recognition_text.set("—")
+                    self.recognition_message.set(str(error))
                     self.audio_message.set(str(error))
                     self._log(str(error))
                 elif operation == "inputs":
@@ -244,7 +260,7 @@ class AubarApp:
                     self.audio_message.set("Micrófono apagado. Listo para capturar." if result else "No hay micrófonos. Conectá uno y buscá de nuevo.")
                 elif operation == "start" and self.audio_phase == "starting":
                     if result and self.capture.requested.is_set():
-                        self.audio_phase = "recording"
+                        self.audio_phase = "warming"
                     else:
                         self.stop_recording()
                 elif operation == "stop":
@@ -259,15 +275,32 @@ class AubarApp:
                         if self.capture.overflow:
                             message += " Se perdieron muestras; probá otra entrada."
                         self.audio_message.set(message)
+                        self.audio_phase = "recognizing"
+                        self.recognition_message.set("Reconociendo la frase…")
+                        self.talk_button.configure(text="Reconociendo…")
+                        self.level_bar['value'] = 0
+                        self._audio_submit("recognized", lambda recording=result: self.recognizer.recognize(recording))
                     else:
                         self.audio_message.set("Micrófono apagado. Captura muy corta; mantené pulsado mientras hablás.")
+                        self.recognition_text.set("—")
+                        self.recognition_message.set("Captura demasiado corta para reconocer.")
                     self._log(self.audio_message.get())
+                elif operation == "recognized":
+                    self.audio_phase = "idle"
+                    self.recognized_action = result.action
+                    self.recognition_text.set(result.text or "—")
+                    self.recognition_message.set(result.message)
                 if self.audio_phase == "idle":
                     self.talk_button.configure(text="Mantené pulsado para hablar")
                     self.level_bar['value'] = 0
                 self._audio_controls()
         except Empty:
             pass
+        if self.audio_phase == "warming":
+            if self.capture.ready.is_set():
+                self.audio_phase = "recording"
+            elif self.capture.finished.is_set():
+                self.stop_recording()
         if self.audio_phase == "recording":
             self.level_bar['value'] = self.capture.level*100
             self.audio_message.set(f"Escuchando… {self.capture.duration:.1f} / 10 s. Soltá para terminar.")

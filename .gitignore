@@ -22,6 +22,8 @@ venv/
 # Dependencias y resultados de futuras herramientas web.
 node_modules/
 /dist/
+/models/
+/tmp/
 
 # Credenciales locales. Las plantillas si se pueden versionar.
 .env

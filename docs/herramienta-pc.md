@@ -15,6 +15,9 @@ La pestaña Micrófono permite capturar audio local sin necesitar conectar la pl
   lanzador en el entorno local `.venv`.
 - [sounddevice 0.5.5](https://python-sounddevice.readthedocs.io/en/0.5.5/),
   para enumerar y capturar entradas de audio; el paquete de Windows incluye PortAudio.
+- [Vosk 0.3.45](https://alphacephei.com/vosk/) y el modelo
+  [vosk-model-small-es-0.42](https://alphacephei.com/vosk/models), para reconocer
+  español localmente. El modelo tiene licencia Apache 2.0.
 - Micrófono habilitado en Windows para aplicaciones de escritorio.
 - Internet solo para instalar las dependencias por primera vez.
 
@@ -29,7 +32,8 @@ Desde PowerShell, en la raíz del repositorio:
 ```
 
 El lanzador crea `.venv` si no existe, comprueba las dependencias y abre la
-ventana. No instala paquetes globales de Python. Si Python no está en PATH,
+ventana. También descarga el modelo español de unos 39 MB la primera vez,
+verificando su SHA256. No instala paquetes globales de Python. Si Python no está en PATH,
 se puede indicar su ejecutable:
 
 ```powershell
@@ -41,6 +45,7 @@ También se puede preparar y ejecutar manualmente:
 ```powershell
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r pc\requirements.txt
+.\.venv\Scripts\python.exe tools\install_voice_model.py
 .\.venv\Scripts\python.exe -m pc.aubar_control
 ```
 
@@ -70,6 +75,8 @@ Una operación del micrófono no bloquea la conexión USB.
    (MME, DirectSound o WASAPI); el nombre incluye la interfaz y el índice.
 3. Mantener pulsado **Mantené pulsado para hablar** mientras se habla.
    También funciona la barra espaciadora cuando el botón tiene el foco.
+   Esperar la indicación **Escuchando** antes de empezar la frase: aparece al
+   recibir el primer bloque del micrófono, no solo al abrir el dispositivo.
 4. Durante la captura se muestra **Escuchando**, un nivel de entrada y la duración.
 5. Soltar el botón para finalizar. La indicación cambia a **Micrófono apagado**
    y muestra la duración capturada. Las capturas menores de 0,15 s se descartan.
@@ -79,8 +86,8 @@ o alcanzar 10 segundos. Al soltar el botón se rechazan inmediatamente nuevas
 muestras, incluso si la apertura del dispositivo todavía está pendiente.
 
 El audio queda en memoria y se reemplaza en la próxima captura; no se guarda
-automáticamente ni se envía a servicios externos o al ESP32. TK19 incorporará
-el reconocimiento. Se captura PCM mono de 16 bits, preferentemente a 16 kHz;
+automáticamente ni se envía a servicios externos o al ESP32. Se captura PCM
+mono de 16 bits, preferentemente a 16 kHz;
 si el dispositivo no admite esa frecuencia, se utiliza su frecuencia nativa
 y se conserva ese dato junto con el audio.
 
@@ -88,6 +95,44 @@ Si no hay nivel, elegir otra entrada y comprobar que el micrófono no esté sile
 Si falla la apertura, revisar los permisos de **Micrófono** en Configuración de
 Windows, habilitar el acceso para aplicaciones de escritorio y volver a buscar.
 Un error del micrófono no desconecta el ESP32.
+
+## Reconocimiento de comandos
+
+Al soltar el botón, el micrófono se cierra y la captura se transcribe con Vosk
+en un trabajador de audio. La interfaz y el USB siguen funcionando. El modelo
+se carga en la primera captura con voz y se reutiliza en las siguientes.
+La sección **Lo que escuché** muestra el texto y la acción asociada.
+
+| Frase de ejemplo | Acción detectada |
+| --- | --- |
+| «Contento» | Expresión contenta |
+| «Ponete enojado» | Expresión enojada |
+| «Dormite» / «Duerme» / «A dormir» | Expresión dormida |
+| «Neutral» / «Sorprendido» | Expresión indicada |
+| «Mirá a la izquierda» / «Mirá a la derecha» | Mirada indicada |
+| «Mirá al centro» | Mirada centrada |
+| «Modo automático» / «Modo manual» | Modo indicado |
+
+Se ignoran mayúsculas, tildes y puntuación. Se acepta «Kirby» al principio
+y «por favor» al final. Se admite la separación «dormí te» que puede producir
+el modelo al transcribir el voseo.
+Para la expresión contenta se utiliza solamente «contento», sin «ponete»,
+«ponte» ni «pone». El texto mostrado conserva lo transcrito.
+La coincidencia debe ser con la frase completa:
+«no te pongas enojado» o «creo que está contento» no se convierten en órdenes.
+No se usa una gramática restringida que fuerce cualquier audio a una orden.
+
+El silencio, las frases desconocidas y los resultados de confianza baja quedan
+sin acción y muestran un mensaje para repetir. La confianza del motor es una
+heurística y no garantiza que toda transcripción sea correcta; el texto permite
+comprobar qué entendió. Se rechazan palabras con confianza menor a 0,35 o un
+promedio menor a 0,45. Una frase nueva borra la acción anterior.
+
+En TK19 las acciones **solo se muestran**: el envío al ESP32 corresponde a TK20.
+El modelo está en `models/`, excluido de Git; el lanzador permite descargarlo
+nuevamente. Las pruebas y la ejecución posterior a la instalación funcionan
+sin internet. El instalador usa la URL oficial y fija el SHA256
+`09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f`.
 
 ## Pruebas
 

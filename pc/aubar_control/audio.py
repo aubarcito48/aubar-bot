@@ -49,6 +49,7 @@ class MicrophoneCapture:
         self.backend = backend
         self.requested = Event()
         self.finished = Event()
+        self.ready = Event()
         self.stream = None
         self.chunks = []
         self.frames = 0
@@ -72,6 +73,7 @@ class MicrophoneCapture:
         self.limit_reached = False
         self.overflow = False
         self.finished.clear()
+        self.ready.clear()
         self.requested.set()
 
     def cancel(self):
@@ -80,6 +82,7 @@ class MicrophoneCapture:
     def _callback(self, data, frames, timing, status):
         if not self.requested.is_set():
             return
+        self.ready.set()
         if status:
             self.overflow = True
         remaining = int(self.sample_rate*self.MAX_SECONDS) - self.frames
@@ -110,6 +113,7 @@ class MicrophoneCapture:
                 return False
             self.stream = self.backend.RawInputStream(
                 device=device, samplerate=rate, channels=1, dtype='int16',
+                latency='low',
                 callback=self._callback, finished_callback=self.finished.set,
             )
             if not self.requested.is_set():

@@ -38,3 +38,13 @@ class FakeAudio:
         stream = FakeStream(**kwargs)
         self.streams.append(stream)
         return stream
+
+
+class FakeRecognizer:
+    def __init__(self):
+        from pc.aubar_control.recognition import RecognitionResult
+        from pc.aubar_control.voice_commands import match_command
+        self.result = RecognitionResult('contento', match_command('contento'), 'Expresión: contento')
+
+    def recognize(self, recording):
+        return self.result

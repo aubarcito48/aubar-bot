@@ -3,12 +3,13 @@ import time
 import tkinter as tk
 import unittest
 from array import array
-from audio_fakes import FakeAudio
+from audio_fakes import FakeAudio, FakeRecognizer
 
 from pc.aubar_control.app import AubarApp
 from pc.aubar_control.protocol import DeviceError, DeviceStatus
 from pc.aubar_control.session import DevicePort
 from pc.aubar_control.audio import InputDevice, MicrophoneCapture
+from pc.aubar_control.recognition import RecognitionResult
 
 
 class FakeSession:
@@ -39,8 +40,10 @@ class AppTests(unittest.TestCase):
         self.session = FakeSession()
         self.ports = [DevicePort("COM1", "Serie"), DevicePort("COM3", "ESP32", True)]
         self.audio = FakeAudio()
+        self.recognizer = FakeRecognizer()
         self.app = AubarApp(self.root, self.session, lambda: self.ports,
-                           MicrophoneCapture(self.audio), lambda: [InputDevice(1, 'Microfono', 'Prueba', True)])
+                           MicrophoneCapture(self.audio), lambda: [InputDevice(1, 'Microfono', 'Prueba', True)],
+                           self.recognizer)
         self.pump(lambda: not self.app.busy and not self.app.audio_scan_busy)
 
     def tearDown(self):
@@ -54,6 +57,13 @@ class AppTests(unittest.TestCase):
             self.root.update()
             time.sleep(0.005)
         self.assertTrue(condition(), "UI operation did not finish")
+
+    def start_microphone(self):
+        self.app.start_recording()
+        self.pump(lambda: self.app.audio_phase == 'warming')
+        self.assertIn('Preparando', self.app.audio_message.get())
+        self.app.capture.ready.set()
+        self.pump(lambda: self.app.audio_phase == 'recording')
 
     def test_connect_status_disconnect_and_reconnect_to_new_port(self):
         self.assertTrue(self.app.port_value.get().startswith("COM3"))
@@ -100,8 +110,7 @@ class AppTests(unittest.TestCase):
         self.assertTrue(self.app.connected)
 
     def test_push_to_talk_records_only_while_held(self):
-        self.app.start_recording()
-        self.pump(lambda: self.app.audio_phase == 'recording')
+        self.start_microphone()
         pcm = array('h', [4000]*4000).tobytes()
         self.audio.streams[-1].emit(pcm)
         self.app.stop_recording()
@@ -110,6 +119,18 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.app.last_recording.pcm, pcm)
         self.assertIn('apagado', self.app.audio_message.get())
         self.assertTrue(self.audio.streams[-1].closed)
+        self.assertEqual(self.app.recognized_action.argument, 'contento')
+
+    def test_unknown_phrase_clears_previous_action(self):
+        for text, action in [('contento', self.recognizer.result.action), ('hoy hace frio', None)]:
+            self.recognizer.result = RecognitionResult(text, action, 'Resultado de prueba')
+            self.start_microphone()
+            self.audio.streams[-1].emit(array('h', [4000]*4000).tobytes())
+            self.app.stop_recording()
+            self.pump(lambda: self.app.audio_phase == 'idle')
+            self.assertEqual(self.app.recognition_text.get(), text)
+            self.assertEqual(self.app.recognized_action, action)
+        self.assertIsNone(self.session.port)  # Recognition alone does not open USB.
 
     def test_audio_errors_do_not_disconnect_usb(self):
         self.app.connect()
@@ -122,8 +143,7 @@ class AppTests(unittest.TestCase):
         self.assertIn('No se pudo abrir', self.app.audio_message.get())
 
     def test_focus_loss_stops_capture(self):
-        self.app.start_recording()
-        self.pump(lambda: self.app.audio_phase == 'recording')
+        self.start_microphone()
         self.audio.streams[-1].emit(array('h', [4000]*4000).tobytes())
         self.app._focus_out(None)  # Withdrawn test window has no application focus.
         self.pump(lambda: self.app.audio_phase == 'idle')
@@ -131,8 +151,7 @@ class AppTests(unittest.TestCase):
         self.assertTrue(self.audio.streams[-1].closed)
 
     def test_limit_stops_capture_without_release(self):
-        self.app.start_recording()
-        self.pump(lambda: self.app.audio_phase == 'recording')
+        self.start_microphone()
         self.audio.streams[-1].emit(array('h', [4000]*161000).tobytes())
         self.pump(lambda: self.app.audio_phase == 'idle')
         self.assertEqual(self.app.last_recording.duration, 10)
