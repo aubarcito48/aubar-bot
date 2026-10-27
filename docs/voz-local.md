@@ -39,6 +39,32 @@ Si no hay una voz española compatible con SAPI, la herramienta lo informa.
 Las voces disponibles para otros servicios de Windows pueden no estar expuestas
 a SAPI. Después de instalar una compatible, repetir la consulta de voces.
 
+## Controles en el panel
+
+Abrir la pestaña **Voz**. Esta prueba funciona sin conectar el ESP32.
+
+1. Mantener **Activar voz** marcado.
+2. Ajustar **Volumen** de 0 a 100; el valor inicial es 80.
+3. Usar el texto predeterminado o escribir otro en **Texto para probar**.
+4. Pulsar **Probar voz**. El estado muestra **Hablando…** y al terminar informa
+   la voz utilizada.
+5. Pulsar **Detener** para cortar la reproducción actual. Se puede iniciar
+   otra prueba sin reiniciar el panel.
+
+Desmarcar **Activar voz** detiene el audio en curso y bloquea nuevos pedidos
+desde el panel. Al volver a marcarlo no se repite la frase anterior.
+El volumen se aplica a la próxima reproducción y no modifica el volumen
+global de Windows. El texto y el volumen se editan cuando no hay audio activo.
+
+Para esta prueba debe estar apagada la escucha automática y terminada cualquier
+captura manual. Mientras suena la voz no se puede iniciar una captura.
+La pausa y reanudación automática del micrófono se integran en la tarea de
+coordinación. El panel y las consultas USB siguen funcionando durante el audio.
+
+Si la voz falla o falta una voz española, el estado muestra el error y permite
+reintentar; la conexión con el ESP32 se mantiene. Los ajustes de esta pestaña
+se conservan durante la sesión del panel.
+
 ## API para el panel y la futura IA
 
 `SpeechEngine.speak(text)` devuelve un `Future` inmediatamente. La conversión y
@@ -57,18 +83,21 @@ future = engine.speak("Este texto puede venir de cualquier fuente.")
 
 - `voices()` devuelve un futuro con las voces españolas disponibles.
 - `speak(text, volume=100, rate=0)` admite volumen de 0 a 100 y velocidad
-  SAPI de -10 a 10. Los controles visuales se agregan en la siguiente tarea.
+  SAPI de -10 a 10.
 - El texto debe ser no vacío, de hasta 2000 caracteres y no contener NUL.
 - Se admite una operación a la vez. Un segundo pedido mientras está ocupado
   devuelve `SpeechError`, sin acumular reproducciones.
 - El futuro termina cuando finaliza el audio o devuelve un error. No confundir
   la aceptación del pedido con el final de la reproducción.
+- `stop()` cancela la reproducción actual y permite volver a hablar usando
+  el mismo motor. El futuro de esa reproducción termina con `SpeechCancelled`
+  o queda cancelado si todavía no había comenzado.
 - `close()` detiene el ayudante activo y libera el trabajador; no vuelve a
   reproducir pedidos antiguos.
 
-Esta integración aporta el motor de salida. Las respuestas tras confirmar
-comandos, los controles del panel y la pausa de escucha durante la reproducción
-se conectan en las siguientes tareas.
+El panel usa `app.speak_text(text)` para respetar la activación de voz, el
+volumen y los estados de reproducción. Las respuestas tras confirmar comandos
+y la coordinación automática con el micrófono se conectan en las siguientes tareas.
 
 ## Validación
 

@@ -237,10 +237,15 @@ Las poses dormidas conservan los ojos cerrados y también pueden orientarse.
 ## Motor de salida de voz
 
 El panel incorpora un motor local de texto a voz en español, independiente de
-los comandos del avatar. La [guía de voz local](voz-local.md) explica sus
-requisitos, la prueba audible desde la terminal y la API que se usará para
-las respuestas habladas. Los controles visuales y la coordinación con el
-micrófono se incorporan en las siguientes tareas del sprint.
+los comandos del avatar. La pestaña **Voz** permite activarlo, probar un texto,
+ajustar el volumen y detener la reproducción. Muestra cuándo está hablando,
+la voz utilizada y los posibles errores sin bloquear el panel ni el USB.
+
+Desactivar la voz corta el audio actual; volver a activarla no repite la frase.
+Para probarla hay que apagar la escucha automática o terminar la captura manual.
+La [guía de voz local](voz-local.md) explica estos controles, sus requisitos y
+la API que se usará para las respuestas habladas. La coordinación automática
+con el micrófono se incorpora en la tarea correspondiente del sprint.
 
 ## Modelo local
 

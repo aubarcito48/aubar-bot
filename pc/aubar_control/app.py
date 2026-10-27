@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, CancelledError
 import logging
 from pathlib import Path
 from queue import Empty, Queue
@@ -12,7 +12,7 @@ from .recognition import LocalRecognizer, RecognitionError
 from .catalog import EXPRESSIONS, ANIMATIONS
 from .voice_commands import VoiceAction
 from .automatic_audio import AutomaticCapture
-from .speech import SpeechEngine
+from .speech import SpeechEngine, SpeechError, SpeechCancelled
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -31,6 +31,14 @@ class AubarApp:
         self.capture = capture or MicrophoneCapture()
         self.automatic_capture = automatic_capture or AutomaticCapture(self.capture.backend)
         self.speech = speech or SpeechEngine()
+        self.speech_enabled = tk.BooleanVar(value=True)
+        self.speech_volume = tk.DoubleVar(value=80)
+        self.speech_volume_label = tk.StringVar(value="80 %")
+        self.speech_message = tk.StringVar(value="Lista para probar la voz en español.")
+        self.speech_voice = tk.StringVar(value="Se usará la voz en español de Windows.")
+        self._speech_future = None
+        self._speech_stop_requested = False
+        self._speech_is_test = False
         self.auto_enabled = tk.BooleanVar(value=False)
         self.auto_generation = 0
         self.auto_running = False
@@ -112,6 +120,9 @@ class AubarApp:
         microphone_tab = ttk.Frame(notebook, padding=16)
         notebook.add(device_tab, text="Dispositivo")
         notebook.add(microphone_tab, text="Micrófono")
+        speech_tab = ttk.Frame(notebook, padding=16)
+        notebook.add(speech_tab, text="Voz")
+        self._build_speech(speech_tab)
         catalog_tab = ttk.Frame(notebook, padding=16)
         notebook.add(catalog_tab, text="Catálogo")
         self._build_catalog(catalog_tab)
@@ -157,6 +168,135 @@ class AubarApp:
         self.activity.grid(row=7, column=0, sticky="nsew")
         ttk.Label(main, text="Cerrá el monitor serie de Arduino antes de conectar.", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=(12, 0))
         self._controls()
+
+    def _build_speech(self, panel):
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(4, weight=1)
+        heading = ttk.Frame(panel)
+        heading.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        heading.columnconfigure(0, weight=1)
+        ttk.Label(heading, text="La voz de Aubar", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(heading, textvariable=self.speech_voice, style="Muted.TLabel",
+                  wraplength=540).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        icon=tk.Canvas(heading,width=70,height=60,bg=BG,highlightthickness=0)
+        icon.grid(row=0,column=1,rowspan=2,padx=(16,0))
+        icon.create_oval(3,3,57,57,fill=PINK,outline=PINK)
+        icon.create_polygon(15,25,23,25,33,17,33,43,23,35,15,35,fill=INK)
+        icon.create_arc(28,18,48,42,start=-60,extent=120,style="arc",outline=INK,width=3)
+        self.speech_check=ttk.Checkbutton(panel,text="Activar voz",variable=self.speech_enabled,
+                                         command=self.toggle_speech)
+        self.speech_check.grid(row=1,column=0,sticky="w",pady=(0,10))
+        volume=ttk.Frame(panel)
+        volume.grid(row=2,column=0,sticky="ew",pady=(0,12))
+        volume.columnconfigure(0,weight=1)
+        ttk.Label(volume,text="Volumen").grid(row=0,column=0,sticky="w")
+        ttk.Label(volume,textvariable=self.speech_volume_label).grid(row=0,column=1,sticky="e")
+        self.speech_volume_scale=ttk.Scale(volume,from_=0,to=100,variable=self.speech_volume,
+                                           command=self._speech_volume_changed)
+        self.speech_volume_scale.grid(row=1,column=0,columnspan=2,sticky="ew",pady=(8,0))
+        ttk.Label(panel,text="Texto para probar").grid(row=3,column=0,sticky="w",pady=(0,8))
+        self.speech_text=tk.Text(panel,height=3,wrap="word",font=("Segoe UI",12),fg=INK,
+                                 bg="white",padx=12,pady=10,relief="flat",
+                                 highlightthickness=1,highlightbackground="#dfe5ef")
+        self.speech_text.insert("1.0","Hola, soy Aubar. Esta es mi voz en español. Podés ajustar el volumen y detener esta prueba desde el panel.")
+        self.speech_text.grid(row=4,column=0,sticky="nsew")
+        buttons=ttk.Frame(panel)
+        buttons.grid(row=5,column=0,sticky="ew",pady=(10,10))
+        self.speech_test_button=ttk.Button(buttons,text="Probar voz",style="Primary.TButton",
+                                          command=self.test_speech)
+        self.speech_test_button.pack(side="left",padx=(0,10))
+        self.speech_stop_button=ttk.Button(buttons,text="Detener",command=self.stop_speech)
+        self.speech_stop_button.pack(side="left")
+        self.speech_status=tk.Label(panel,textvariable=self.speech_message,bg="#e8eef8",fg=INK,
+                                    anchor="w",justify="left",font=("Segoe UI",11),
+                                    padx=14,pady=8,wraplength=650)
+        self.speech_status.grid(row=6,column=0,sticky="ew")
+        self.speech_hint=ttk.Label(panel,text="La prueba usa la salida de audio predeterminada de Windows.",
+                                   style="Muted.TLabel",wraplength=650)
+        self.speech_hint.grid(row=7,column=0,sticky="w",pady=(8,0))
+        self._speech_controls()
+
+    def _speech_volume_changed(self, value=None):
+        self.speech_volume_label.set(f"{round(self.speech_volume.get())} %")
+
+    def _speech_controls(self):
+        active=self._speech_future is not None or self.speech.busy
+        enabled=self.speech_enabled.get()
+        microphone_busy=self.auto_enabled.get() or self.audio_phase!='idle'
+        self.speech_test_button.configure(state="normal" if enabled and not active and not microphone_busy else "disabled")
+        self.speech_stop_button.configure(state="normal" if active and not self._speech_stop_requested else "disabled")
+        self.speech_volume_scale.configure(state="normal" if enabled and not active else "disabled")
+        self.speech_text.configure(state="normal" if enabled and not active else "disabled")
+        if microphone_busy:
+            self.speech_hint.configure(text="Apagá la escucha automática o terminá la captura para probar la voz.")
+        else:
+            self.speech_hint.configure(text="La prueba usa la salida de audio predeterminada de Windows.")
+
+    def _speech_message(self, text, error=False):
+        self.speech_message.set(text)
+        self.speech_status.configure(bg="#fbe8ed" if error else "#e8eef8",fg="#942b45" if error else INK)
+
+    def test_speech(self):
+        if not self.closed:
+            self.speak_text(self.speech_text.get("1.0","end-1c"),is_test=True)
+
+    def speak_text(self, text, *, is_test=False):
+        if self.closed or not self.speech_enabled.get() or self._speech_future is not None or self.speech.busy:
+            return False
+        if self.auto_enabled.get() or self.audio_phase!='idle':
+            self._speech_message("Apagá la escucha automática o terminá la captura antes de probar la voz.")
+            return False
+        try:
+            self._speech_future=self.speech.speak(text,volume=round(self.speech_volume.get()))
+        except SpeechError as error:
+            self._speech_message(str(error),error=True)
+            return False
+        self._speech_is_test=is_test
+        self._speech_stop_requested=False
+        self._speech_message("Hablando…")
+        self._audio_controls()
+        return True
+
+    def stop_speech(self):
+        if self.closed or not self.speech.busy and self._speech_future is None:
+            return
+        self._speech_stop_requested=True
+        self.speech.stop()
+        self._speech_message("Deteniendo la voz…")
+        self._speech_controls()
+
+    def toggle_speech(self):
+        if not self.speech_enabled.get():
+            self.stop_speech()
+            if self._speech_future is None and not self.speech.busy:
+                self._speech_message("Voz desactivada.")
+        elif self._speech_future is None:
+            self._speech_message("Lista para probar la voz en español.")
+        self._speech_controls()
+
+    def _drain_speech(self):
+        future=self._speech_future
+        if future is None or not future.done():
+            return
+        self._speech_future=None
+        try:
+            voice=future.result()
+        except (CancelledError,SpeechCancelled):
+            self._speech_message("Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
+        except Exception as error:
+            if self._speech_stop_requested:
+                self._speech_message("Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
+            else:
+                if not isinstance(error,SpeechError):
+                    logging.exception("Speech playback failed")
+                self._speech_message(str(error) if isinstance(error,SpeechError) else
+                                     "No se pudo reproducir la voz. Revisá la salida de audio.",error=True)
+        else:
+            self.speech_voice.set(f"Voz: {voice.name} ({voice.language})")
+            self._speech_message(("Prueba de voz finalizada." if self._speech_is_test else "Reproducción finalizada.") if not self._speech_stop_requested else
+                                 "Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
+        self._speech_stop_requested=False
+        self._audio_controls()
 
     def _build_catalog(self, panel):
         panel.columnconfigure(0, weight=1)
@@ -247,13 +387,14 @@ class AubarApp:
         self.mic_combo.configure(state="readonly" if idle else "disabled")
         self.mic_scan_button.configure(state="normal" if idle else "disabled")
         # Keep the button enabled during recording so it receives release events.
-        allowed = not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
+        allowed = not self.speech.busy and not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
         self.talk_button.configure(state="normal" if allowed else "disabled")
-        auto_allowed = self.auto_enabled.get() or (idle and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
+        auto_allowed = self.auto_enabled.get() or (idle and not self.speech.busy and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
         self.auto_check.configure(state="normal" if auto_allowed else "disabled")
         if hasattr(self, 'catalog_buttons'):
             for button in self.catalog_buttons:
                 button.configure(state="normal" if self.connected and not self.busy and self.audio_phase=="idle" else "disabled")
+        self._speech_controls()
 
     def _audio_submit(self, operation, action):
         def run():
@@ -275,7 +416,7 @@ class AubarApp:
         self._audio_submit("inputs", self.audio_provider)
 
     def start_recording(self, event=None):
-        if self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
+        if self.speech.busy or self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
             return "break"
         device = self.inputs.get(self.mic_value.get())
         if device is None:
@@ -398,7 +539,7 @@ class AubarApp:
             self.stop_automatic()
             return
         device = self.inputs.get(self.mic_value.get())
-        if self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
+        if self.speech.busy or self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
             self.auto_enabled.set(False)
             self._audio_controls()
             return
@@ -652,6 +793,7 @@ class AubarApp:
         except Empty:
             pass
         self._drain_audio()
+        self._drain_speech()
         self._tick_automatic()
         self._dispatch_voice()
         if not self.closed:

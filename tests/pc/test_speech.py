@@ -6,7 +6,7 @@ import time
 import unittest
 
 import test_app
-from pc.aubar_control.speech import SpeechEngine, SpeechError, SpeechVoice, SapiBackend
+from pc.aubar_control.speech import SpeechEngine, SpeechError, SpeechVoice, SpeechCancelled, SapiBackend
 
 VOICE={'id':'test-es','name':'Voz de prueba','language':'es-MX'}
 
@@ -18,11 +18,11 @@ class FakeSpeechBackend:
         self.closed=False
         self.calls=[]
 
-    def speak(self,text,volume,rate):
+    def speak(self,text,volume,rate,*,cancel_event=None):
         self.calls.append((text,volume,rate))
         self.started.set()
         self.release.wait(2)
-        if self.closed:
+        if self.closed or cancel_event is not None and cancel_event.is_set():
             raise SpeechError('Reproducción cancelada.')
         return SpeechVoice(**VOICE)
 
@@ -30,8 +30,26 @@ class FakeSpeechBackend:
         self.closed=True
         self.release.set()
 
+    def stop(self,cancel_event=None):
+        self.release.set()
+
 
 class SpeechEngineTests(unittest.TestCase):
+    def test_stop_is_reusable_and_does_not_close_the_engine(self):
+        backend=FakeSpeechBackend()
+        engine=SpeechEngine(backend)
+        try:
+            future=engine.speak('Primera frase.')
+            self.assertTrue(backend.started.wait(1))
+            engine.stop()
+            with self.assertRaises(SpeechError):
+                future.result(1)
+            self.assertFalse(backend.closed)
+            self.assertEqual(engine.speak('Segunda frase.').result(1).language,'es-MX')
+            self.assertEqual(len(backend.calls),2)
+        finally:
+            engine.close()
+
     def test_text_from_any_source_is_async_and_a_second_utterance_is_not_queued(self):
         backend=FakeSpeechBackend()
         engine=SpeechEngine(backend)
@@ -112,6 +130,22 @@ class FakeProcess:
 
 @unittest.skipUnless(os.name=='nt','Windows SAPI subprocess adapter')
 class SapiBackendTests(unittest.TestCase):
+    def test_stop_terminates_only_the_current_request_and_can_speak_again(self):
+        first=FakeProcess(gate=threading.Event())
+        second=FakeProcess()
+        processes=iter((first,second))
+        engine=SpeechEngine(SapiBackend(lambda *args,**kwargs:next(processes)))
+        try:
+            future=engine.speak('Primera frase.')
+            self.assertTrue(first.started.wait(1))
+            engine.stop()
+            with self.assertRaises(SpeechCancelled):
+                future.result(1)
+            self.assertEqual(engine.speak('Segunda frase.').result(1).language,'es-MX')
+            self.assertEqual(json.loads(second.input)['text'],'Segunda frase.')
+        finally:
+            engine.close()
+
     def test_arbitrary_text_is_only_json_stdin_and_helper_window_is_hidden(self):
         process=FakeProcess()
         calls=[]
