@@ -1,8 +1,9 @@
 # Panel de Aubar Bot
 
 Aplicación de escritorio para seleccionar el puerto USB, conectar la placa y
-consultar su expresión, modo y mirada. Requiere firmware con protocolo **v2**
-(TK16 o posterior). La conexión y las consultas no cambian el modo del avatar.
+consultar su expresión, modo, mirada y animación. El catálogo completo requiere
+firmware con protocolo **v3**; las funciones anteriores también aceptan v2.
+La conexión y las consultas no cambian el modo del avatar.
 La pestaña Micrófono permite capturar audio local sin necesitar conectar la placa.
 
 ## Requisitos
@@ -177,3 +178,21 @@ físicos se realiza por separado.
 Los errores inesperados se registran en `pc/aubar-control.log`, excluido de Git.
 El código de la aplicación está en `pc/aubar_control/`; el protocolo está en
 [protocolo-usb.md](protocolo-usb.md).
+
+## Catálogo completo
+
+La pestaña **Catálogo** permite elegir las 28 expresiones y las 23 animaciones.
+Conectar primero en **Dispositivo**, elegir una opción y pulsar **Mostrar** o
+**Reproducir**. Cada animación se repite hasta elegir otra acción. **Recorrer todas
+las animaciones** activa la lista automática. El estado muestra la animación activa.
+Las expresiones fijas conservan el parpadeo cuando corresponde.
+
+También se pueden decir los nombres de animación: «pensar», «escuchar», «reír»,
+«celebrar», «dormir», «jugar», etc. «Dormido» o «dormite» siguen eligiendo la pose
+fija; «dormir» reproduce la secuencia. Para una expresión del catálogo usar el
+prefijo «expresión», por ejemplo «expresión tímido» o «expresión cejas enojadas».
+Para distinguir una secuencia se acepta «animación pensar», por ejemplo.
+
+El [catálogo del avatar](catalogo-avatar.md) enumera todas las opciones y explica
+la adaptación visual a la pantalla. El micrófono y el reconocimiento conservan
+las mismas reglas de activación y confirmación; las frases desconocidas no actúan.

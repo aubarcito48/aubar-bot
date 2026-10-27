@@ -1,9 +1,9 @@
 #pragma once
 #include <stddef.h>
 #include <string.h>
-#include "avatar_types.h"
+#include "animation_data.h"
 
-enum class UsbCommandType { Ping, Status, Expression, Look, Mode };
+enum class UsbCommandType { Ping, Status, Expression, Look, Mode, Animation };
 enum class UsbLook { Left, Center, Right };
 enum class UsbMode { Manual, Auto };
 enum class UsbParseResult { Incomplete, Valid, Empty, UnknownCommand, InvalidArgument,
@@ -14,6 +14,7 @@ struct UsbCommand {
   AvatarExpressionId expression = AvatarExpressionId::Neutral;
   UsbLook look = UsbLook::Center;
   UsbMode mode = UsbMode::Auto;
+  AvatarAnimationId animation = AvatarAnimationId::None;
 };
 
 class UsbProtocol {
@@ -57,12 +58,23 @@ class UsbProtocol {
     } else if (strcmp(buffer_, "EXPRESSION") == 0) {
       parsed.type = UsbCommandType::Expression;
       if (!argument) return UsbParseResult::InvalidArgument;
-      if (strcmp(argument, "neutral") == 0) parsed.expression = AvatarExpressionId::Neutral;
-      else if (strcmp(argument, "contento") == 0) parsed.expression = AvatarExpressionId::Happy;
-      else if (strcmp(argument, "sorprendido") == 0) parsed.expression = AvatarExpressionId::Surprised;
-      else if (strcmp(argument, "dormido") == 0) parsed.expression = AvatarExpressionId::Sleeping;
-      else if (strcmp(argument, "enojado") == 0) parsed.expression = AvatarExpressionId::Angry;
-      else return UsbParseResult::InvalidArgument;
+      bool found = false;
+      for (uint8_t i=0; i<static_cast<uint8_t>(AvatarExpressionId::Count); ++i) {
+        if (strcmp(argument, AVATAR_EXPRESSIONS[i].name)==0) {
+          parsed.expression=static_cast<AvatarExpressionId>(i); found=true; break;
+        }
+      }
+      if (!found) return UsbParseResult::InvalidArgument;
+    } else if (strcmp(buffer_, "ANIMATION") == 0) {
+      parsed.type = UsbCommandType::Animation;
+      if (!argument) return UsbParseResult::InvalidArgument;
+      bool found = false;
+      for (uint8_t i=0; i<static_cast<uint8_t>(AvatarAnimationId::Count); ++i) {
+        if (strcmp(argument, AVATAR_ANIMATIONS[i].name)==0) {
+          parsed.animation=static_cast<AvatarAnimationId>(i); found=true; break;
+        }
+      }
+      if (!found) return UsbParseResult::InvalidArgument;
     } else if (strcmp(buffer_, "LOOK") == 0) {
       parsed.type = UsbCommandType::Look;
       if (!argument) return UsbParseResult::InvalidArgument;

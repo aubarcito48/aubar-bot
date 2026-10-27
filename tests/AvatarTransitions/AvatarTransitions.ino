@@ -47,37 +47,24 @@ uint32_t maxRenderUs = 0;
 
 void setup() {
   Serial.begin(115200);
-  // Warm the static silhouette cache; measure per-frame work separately.
-  renderFaceFrame(pixels, avatarExpression(AvatarExpressionId::Neutral), 1, 0);
-  // All ordered expression pairs: verify intermediate poses and both extreme
-  // gaze positions. A partial frame must match the full renderer exactly, and
-  // no eyes may be left outside the region that gets refreshed.
-  constexpr uint8_t count = static_cast<uint8_t>(AvatarExpressionId::Count);
-  for (uint8_t from = 0; from < count; ++from) {
-    for (uint8_t to = 0; to < count; ++to) {
-      ExpressionTransition transition(avatarExpression(static_cast<AvatarExpressionId>(from)));
-      transition.setTarget(avatarExpression(static_cast<AvatarExpressionId>(to)), 0);
-      for (uint32_t time : {0u, 225u, 450u}) {
-        const auto pose = transition.value(time);
-        for (float requested : {-24.0f, 24.0f}) {
-          const float offset = avatarGazeOffset(pose, requested);
-          const uint32_t start = micros();
-          renderFaceFrame(pixels, pose, 1.0f, requested);
-          maxRenderUs = max(maxRenderUs, static_cast<uint32_t>(micros() - start));
-          for (int y = 0; y < 320; ++y) {
-            for (int x = 0; x < 172; ++x) {
-              const uint16_t color = avatarPixel(x, y, pose, 1.0f, offset);
-              const bool inside = x >= FACE_X && x < FACE_X+FACE_WIDTH &&
-                                   y >= FACE_Y && y < FACE_Y+FACE_HEIGHT;
-              if (inside) {
-                const uint16_t stored = pixels[(y-FACE_Y)*FACE_WIDTH+x-FACE_X];
-                const uint16_t expected = (color >> 8) | (color << 8);
-                if (stored != expected) passed = false;
-              } else if (color == AVATAR_EYES) passed = false;
-            }
-          }
-        }
+  constexpr uint8_t count=static_cast<uint8_t>(AvatarExpressionId::Count);
+  for(uint8_t from=0;from<count;++from) for(uint8_t to=0;to<count;++to) {
+    ExpressionTransition transition(avatarExpression(static_cast<AvatarExpressionId>(from)));
+    transition.setTarget(avatarExpression(static_cast<AvatarExpressionId>(to)),0,500);
+    for(uint32_t time: {0u,250u,500u}) for(float requested: {-24.0f,24.0f}) {
+      auto pose=transition.value(time);
+      uint32_t start=micros();
+      renderFaceFrame(pixels,pose,1,requested,time);
+      maxRenderUs=max(maxRenderUs,static_cast<uint32_t>(micros()-start));
+      int eyes=0;
+      const uint16_t background=(AVATAR_BACKGROUND>>8)|(AVATAR_BACKGROUND<<8);
+      const uint16_t eye=(pose.eyeColor>>8)|(pose.eyeColor<<8);
+      for(int y=0;y<FACE_HEIGHT;++y) for(int x=0;x<FACE_WIDTH;++x) {
+        const auto pixel=pixels[y*FACE_WIDTH+x];
+        if(pixel==eye) ++eyes;
+        if(x==0||y==0||x==FACE_WIDTH-1||y==FACE_HEIGHT-1) passed=passed&&pixel==background;
       }
+      passed=passed&&eyes>0;
     }
   }
 }

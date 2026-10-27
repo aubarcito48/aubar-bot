@@ -40,6 +40,8 @@ class FakeSession:
             self.state = replace(self.state, mode='manual', expression=action.argument)
         elif action.command == 'LOOK':
             self.state = replace(self.state, mode='manual', look=action.argument)
+        elif action.command == 'ANIMATION':
+            self.state = replace(self.state, mode='manual', animation=action.argument)
         else:
             self.state = DeviceStatus('auto', 'neutral', 'centro') if action.argument == 'auto' else replace(self.state, mode='manual')
         return self.state

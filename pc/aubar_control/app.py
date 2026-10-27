@@ -9,6 +9,8 @@ from .protocol import DeviceError
 from .session import DeviceSession, available_ports
 from .audio import AudioError, MicrophoneCapture, available_inputs
 from .recognition import LocalRecognizer, RecognitionError
+from .catalog import EXPRESSIONS, ANIMATIONS
+from .voice_commands import VoiceAction
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -50,6 +52,8 @@ class AubarApp:
         self.port_value = tk.StringVar()
         self.banner_value = tk.StringVar(value="Buscando puertos…")
         self.values = {key: tk.StringVar(value="—") for key in ("expression", "mode", "look")}
+        self.animation_value = tk.StringVar(value="Animación: —")
+        self.catalog_message = tk.StringVar(value="Conectá el ESP32 para elegir una expresión o una animación.")
         self._build()
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._events_timer = root.after(80, self._drain)
@@ -100,6 +104,9 @@ class AubarApp:
         microphone_tab = ttk.Frame(notebook, padding=16)
         notebook.add(device_tab, text="Dispositivo")
         notebook.add(microphone_tab, text="Micrófono")
+        catalog_tab = ttk.Frame(notebook, padding=16)
+        notebook.add(catalog_tab, text="Catálogo")
+        self._build_catalog(catalog_tab)
         self._build_microphone(microphone_tab)
         main = device_tab
         main.columnconfigure(0, weight=1)
@@ -132,7 +139,8 @@ class AubarApp:
         for column, (key, title) in enumerate((("expression", "Expresión"), ("mode", "Modo"), ("look", "Mirada"))):
             state.columnconfigure(column, weight=1, uniform="status")
             ttk.Label(state, text=title, style="Caption.TLabel").grid(row=0, column=column, sticky="w", padx=18, pady=(14, 3))
-            ttk.Label(state, textvariable=self.values[key], style="Value.TLabel").grid(row=1, column=column, sticky="w", padx=18, pady=(0, 16))
+            ttk.Label(state, textvariable=self.values[key], style="Value.TLabel", wraplength=200).grid(row=1, column=column, sticky="w", padx=18, pady=(0, 16))
+        ttk.Label(state, textvariable=self.animation_value, style="Caption.TLabel").grid(row=2, column=0, columnspan=3, sticky="w", padx=18, pady=(0, 12))
 
         ttk.Label(main, text="Actividad", style="Section.TLabel").grid(row=6, column=0, sticky="w", pady=(20, 8))
         self.activity = tk.Text(main, height=5, state="disabled", bg="white", fg=INK,
@@ -141,6 +149,49 @@ class AubarApp:
         self.activity.grid(row=7, column=0, sticky="nsew")
         ttk.Label(main, text="Cerrá el monitor serie de Arduino antes de conectar.", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=(12, 0))
         self._controls()
+
+    def _build_catalog(self, panel):
+        panel.columnconfigure(0, weight=1)
+        ttk.Label(panel, text="El avatar completo", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(panel, text="28 expresiones · 23 animaciones", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 20))
+        self.catalog_buttons = []
+        self.catalog_choices = {}
+        for row, (kind, title, catalog) in enumerate((
+            ('EXPRESSION', 'Expresión fija', EXPRESSIONS),
+            ('ANIMATION', 'Animación en bucle', ANIMATIONS))):
+            base=2+row*3
+            ttk.Label(panel, text=title).grid(row=base, column=0, sticky="w", pady=(0, 6))
+            selected=tk.StringVar(value=next(iter(catalog.values())))
+            choices={label: identifier for identifier, label in catalog.items()}
+            self.catalog_choices[kind]=(selected, choices)
+            ttk.Combobox(panel, textvariable=selected, values=list(choices), state="readonly").grid(row=base+1, column=0, sticky="ew", padx=(0, 12))
+            button=ttk.Button(panel, text="Mostrar" if row==0 else "Reproducir",
+                command=lambda k=kind: self.apply_catalog(k), style="Primary.TButton")
+            button.grid(row=base+1, column=1, pady=(0, 20))
+            self.catalog_buttons.append(button)
+        demo=ttk.Button(panel, text="Recorrer todas las animaciones", command=lambda: self.apply_catalog('MODE'))
+        demo.grid(row=8, column=0, sticky="w", pady=(4, 16))
+        self.catalog_buttons.append(demo)
+        ttk.Label(panel, textvariable=self.catalog_message, wraplength=650).grid(row=9, column=0, columnspan=2, sticky="w")
+        ttk.Label(panel, text="Voz: «pensar», «reír», «celebrar», «dormir»…\n"
+                  "Para una pose fija: «expresión tímido» o «expresión cejas enojadas».\n"
+                  "BOOT adelanta la animación; en una expresión fija, pasa a la siguiente.",
+                  style="Muted.TLabel", wraplength=650).grid(row=10, column=0, columnspan=2, sticky="w", pady=(20, 0))
+
+    def apply_catalog(self, kind):
+        if self.closed or self.busy or not self.connected or self.audio_phase!='idle':
+            return
+        if kind=='MODE':
+            action=VoiceAction('MODE', 'auto', 'Todas las animaciones')
+        else:
+            selected, choices=self.catalog_choices[kind]
+            identifier=choices.get(selected.get())
+            if identifier is None:
+                return
+            action=VoiceAction(kind, identifier, selected.get())
+        token=self.connection_token
+        self.catalog_message.set('Enviando al ESP32…')
+        self._submit('catalog', lambda: (token, action, self.session.apply_action(action)))
 
     def _build_microphone(self, panel):
         panel.columnconfigure(0, weight=1)
@@ -184,6 +235,9 @@ class AubarApp:
         # Keep the button enabled during recording so it receives release events.
         allowed = not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
         self.talk_button.configure(state="normal" if allowed else "disabled")
+        if hasattr(self, 'catalog_buttons'):
+            for button in self.catalog_buttons:
+                button.configure(state="normal" if self.connected and not self.busy and self.audio_phase=="idle" else "disabled")
 
     def _audio_submit(self, operation, action):
         def run():
@@ -327,6 +381,8 @@ class AubarApp:
         enable(self.status_button, not self.busy and self.connected)
         enable(self.scan_button, not self.busy and not self.connected)
         self.port_combo.configure(state="readonly" if not self.busy and not self.connected else "disabled")
+        for button in self.catalog_buttons:
+            enable(button, self.connected and not self.busy and self.audio_phase=="idle")
 
     def _message(self, text, error=False):
         self.banner_value.set(text)
@@ -398,11 +454,13 @@ class AubarApp:
         self._submit("status", self.session.status)
 
     def _clear_state(self):
+        self.animation_value.set("Animación: —")
         for value in self.values.values():
             value.set("—")
 
     def _apply_status(self, status):
-        self.values["expression"].set(status.expression.capitalize())
+        self.values["expression"].set(EXPRESSIONS.get(status.expression, status.expression.capitalize()))
+        self.animation_value.set("Animación: "+ANIMATIONS.get(status.animation, "Ninguna"))
         self.values["mode"].set("Automático" if status.mode == "auto" else "Manual")
         self.values["look"].set(status.look.capitalize())
 
@@ -420,6 +478,8 @@ class AubarApp:
                     self._log(str(error))
                     if operation == 'voice':
                         self.recognition_message.set(str(error))
+                    if operation == 'catalog':
+                        self.catalog_message.set(str(error))
                 elif operation == "ports":
                     previous = self.port_value.get()
                     self.ports = {port.label: port for port in result}
@@ -437,11 +497,13 @@ class AubarApp:
                     self._apply_status(result)
                     if operation == "status":
                         self._log("Estado del dispositivo actualizado.")
-                elif operation == 'voice':
+                elif operation in ('voice', 'catalog'):
                     token, action, status = result
                     if token == self.connection_token and self.connected:
                         self._apply_status(status)
                         self.recognition_message.set(f'{action.label}. Confirmado por el ESP32.')
+                        if operation=='catalog':
+                            self.catalog_message.set(f'{action.label}. Confirmado por el ESP32.')
                         self._log(f'{action.label}. Confirmado por el ESP32.')
                     self.audio_phase = 'idle'
                     self.talk_button.configure(text='Mantené pulsado para hablar')

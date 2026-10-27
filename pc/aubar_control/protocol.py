@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from .catalog import EXPRESSIONS, ANIMATIONS
 
 
 class DeviceError(Exception):
@@ -10,11 +11,13 @@ class DeviceStatus:
     mode: str
     expression: str
     look: str
+    animation: str = 'none'
 
 
 def encode_action(action) -> bytes:
     allowed = {
-        'EXPRESSION': {'neutral', 'contento', 'sorprendido', 'dormido', 'enojado'},
+        'EXPRESSION': set(EXPRESSIONS),
+        'ANIMATION': set(ANIMATIONS),
         'LOOK': {'izquierda', 'centro', 'derecha'},
         'MODE': {'manual', 'auto'},
     }
@@ -34,10 +37,14 @@ def parse_status(line: str) -> DeviceStatus:
     values = dict(pairs)
     allowed = {
         "mode": {"auto", "manual"},
-        "expression": {"neutral", "contento", "sorprendido", "dormido", "enojado"},
+        "expression": set(EXPRESSIONS),
         "look": {"izquierda", "centro", "derecha"},
+        "animation": set(ANIMATIONS) | {'none'},
     }
-    if len(pairs) != 3 or set(values) != set(allowed) or any(
+    # Accept the old three-field status for existing v2 devices.
+    if 'animation' not in values:
+        values['animation'] = 'none'
+    if len(pairs) not in (3, 4) or len(dict(pairs))!=len(pairs) or set(values) != set(allowed) or any(
         values[key] not in choices for key, choices in allowed.items()
     ):
         raise DeviceError("El estado recibido no corresponde a esta versión de Aubar Bot.")

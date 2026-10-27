@@ -1,5 +1,5 @@
 #include "../../firmware/KirbyPantalla/avatar_state.h"
-#include "../../firmware/KirbyPantalla/avatar_render.h"
+#include "../../firmware/KirbyPantalla/avatar_frame.h"
 
 constexpr void press(AvatarState& state, uint32_t now) {
   state.update(now, true);
@@ -32,9 +32,9 @@ constexpr bool cyclesAndKeepsSleepingEyesClosed() {
   if (state.update(10000, false) || state.openness() != 1.0f) return false;
   press(state, 10100);
   if (state.expressionId() != AvatarExpressionId::Angry || !state.expression().blinks) return false;
-  press(state, 10200);
+  for(uint8_t i=4;i<static_cast<uint8_t>(AvatarExpressionId::Count);++i) press(state, 10200+(i-4)*100);
   return state.expressionId() == AvatarExpressionId::Neutral && state.openness() == 1.0f &&
-         !state.update(13739, false) && state.update(13740, false);
+         !state.update(16039, false) && state.update(16040, false);
 }
 
 constexpr bool changesExpressionDuringBlink() {
@@ -66,10 +66,13 @@ static_assert(buttonHandlesClockRollover(), "Button debounce failed across milli
 uint32_t frameHash(const AvatarExpression& expression, float openness, int& eyePixels) {
   uint32_t hash = 2166136261u;
   eyePixels = 0;
-  for (int y = 0; y < 320; ++y) {
-    for (int x = 0; x < 172; ++x) {
-      uint16_t color = avatarPixel(x, y, expression, openness);
-      if (color == AVATAR_EYES) ++eyePixels;
+  static uint16_t pixels[FACE_WIDTH*FACE_HEIGHT];
+  renderFaceFrame(pixels,expression,openness,0);
+  for (int y = 0; y < FACE_HEIGHT; ++y) {
+    for (int x = 0; x < FACE_WIDTH; ++x) {
+      uint16_t stored=pixels[y*FACE_WIDTH+x];
+      uint16_t color=(stored>>8)|(stored<<8);
+      if (color == expression.eyeColor) ++eyePixels;
       hash = (hash ^ color) * 16777619u;
     }
   }

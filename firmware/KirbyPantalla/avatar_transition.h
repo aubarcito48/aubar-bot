@@ -18,6 +18,12 @@ constexpr AvatarEye transitionEye(const AvatarEye& from, const AvatarEye& to, fl
           transitionMix(from.angle, to.angle, t)};
 }
 
+constexpr uint16_t transitionColor(uint16_t a, uint16_t b, float t) {
+  return (static_cast<uint16_t>(transitionMix(a>>11,b>>11,t))<<11) |
+         (static_cast<uint16_t>(transitionMix((a>>5)&63,(b>>5)&63,t))<<5) |
+         static_cast<uint16_t>(transitionMix(a&31,b&31,t));
+}
+
 class ExpressionTransition {
  public:
   constexpr explicit ExpressionTransition(const AvatarExpression& initial)
@@ -28,14 +34,19 @@ class ExpressionTransition {
     if (t >= 1.0f) return to_;
     return {to_.name, transitionEye(from_.left, to_.left, t),
             transitionEye(from_.right, to_.right, t),
-            transitionMix(from_.spacing, to_.spacing, t), to_.blinks};
+            transitionMix(from_.spacing, to_.spacing, t), to_.blinks,
+            transitionMix(from_.headX,to_.headX,t), transitionMix(from_.headY,to_.headY,t),
+            transitionMix(from_.headZ,to_.headZ,t),
+            transitionColor(from_.bodyColor,to_.bodyColor,t),
+            transitionColor(from_.eyeColor,to_.eyeColor,t), to_.bodyMotion,to_.eyeMotion,
+            transitionMix(from_.perspective,to_.perspective,t)};
   }
 
-  constexpr void setTarget(const AvatarExpression& target, uint32_t now) {
+  constexpr void setTarget(const AvatarExpression& target, uint32_t now, uint32_t duration = 450) {
     from_ = value(now);  // Retarget from the current pose, even mid-transition.
     to_ = target;
     startedAt_ = now;
-    duration_ = 450;
+    duration_ = duration;
   }
 
   constexpr bool active(uint32_t now) const { return now - startedAt_ < duration_; }

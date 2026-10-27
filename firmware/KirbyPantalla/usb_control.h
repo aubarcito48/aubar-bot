@@ -51,13 +51,18 @@ class UsbControl {
       const auto& cmd = command();
       switch (cmd.type) {
         case UsbCommandType::Ping:
-          snprintf(response_, sizeof(response_), "OK PONG 2\n"); break;
+          snprintf(response_, sizeof(response_), "OK PONG 3\n"); break;
         case UsbCommandType::Status:
-          snprintf(response_, sizeof(response_), "OK STATUS mode=%s expression=%s look=%s\n",
+          snprintf(response_, sizeof(response_), "OK STATUS mode=%s expression=%s look=%s animation=%s\n",
                    controller.mode() == UsbMode::Manual ? "manual" : "auto",
                    controller.avatar().expression().name,
                    controller.look() == UsbLook::Left ? "izquierda" :
-                   controller.look() == UsbLook::Right ? "derecha" : "centro"); break;
+                   controller.look() == UsbLook::Right ? "derecha" : "centro",
+                   controller.animation()==AvatarAnimationId::None ? "none" :
+                   avatarAnimation(controller.animation()).name); break;
+        case UsbCommandType::Animation:
+          snprintf(response_, sizeof(response_), "OK APPLIED ANIMATION %s\n",
+                   avatarAnimation(cmd.animation).name); break;
         case UsbCommandType::Expression:
           snprintf(response_, sizeof(response_), "OK APPLIED EXPRESSION %s\n",
                    avatarExpression(cmd.expression).name); break;
@@ -74,7 +79,7 @@ class UsbControl {
   }
 
   UsbProtocol protocol_;
-  char response_[80] = {};
+  char response_[160] = {};
   size_t responseLength_ = 0;
   size_t sent_ = 0;
 };

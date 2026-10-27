@@ -36,34 +36,26 @@ constexpr bool sleepingCentersWithoutLosingSelection() {
 constexpr bool manualModeFreezesCurrentTargetsAndPingDoesNotResetBlink() {
   AvatarController controller;
   controller.start(0);
-  controller.update(2500, false);
-  controller.apply(mode(UsbMode::Manual), 2500);
+  controller.update(500, false);
+  controller.apply(mode(UsbMode::Manual), 500);
   controller.apply({UsbCommandType::Ping}, 3000);
   controller.apply({UsbCommandType::Status}, 3400);
   controller.update(3500, false);
-  return controller.look() == UsbLook::Left && controller.avatar().openness() == 0.45f;
+  return controller.look() == UsbLook::Center && controller.avatar().openness() == 0.45f;
 }
 
 constexpr bool autoRestartsAndButtonKeepsItsMode() {
-  AvatarController controller;
-  controller.apply(expression(AvatarExpressionId::Angry), 0);
-  controller.apply(look(UsbLook::Left), 0);
-  controller.update(10, true);
-  controller.update(50, true);  // BOOT advances to neutral in manual mode.
-  if (controller.mode() != UsbMode::Manual || controller.look() != UsbLook::Left ||
-      controller.avatar().expressionId() != AvatarExpressionId::Neutral) return false;
-  controller.update(60, false);
-  controller.update(100, false);
-  controller.apply(mode(UsbMode::Auto), 200);
-  if (controller.mode() != UsbMode::Auto || controller.look() != UsbLook::Center) return false;
-  controller.update(12159, true);
-  controller.update(12199, true);  // BOOT just before the demo deadline.
-  if (controller.avatar().expressionId() != AvatarExpressionId::Happy) return false;
-  controller.update(12200, false);
-  if (controller.avatar().expressionId() != AvatarExpressionId::Happy) return false;
-  controller.update(24199, false);
-  return controller.mode() == UsbMode::Auto &&
-         controller.avatar().expressionId() == AvatarExpressionId::Surprised;
+  AvatarController c;
+  c.apply(expression(AvatarExpressionId::Angry),0);
+  c.apply(look(UsbLook::Left),0);
+  c.update(10,true); c.update(50,true);
+  if(c.avatar().expressionId()!=AvatarExpressionId::UpwardSideGlance || c.mode()!=UsbMode::Manual) return false;
+  c.update(60,false); c.update(100,false);
+  c.apply(mode(UsbMode::Auto),200);
+  c.update(1200,false);
+  if(c.animation()!=AvatarAnimationId::Idle) return false;
+  c.update(1210,true); c.update(1250,true);
+  return c.mode()==UsbMode::Auto && c.animation()==AvatarAnimationId::Listening;
 }
 
 constexpr bool usbWinsAndRepeatedCommandsKeepBlinking() {

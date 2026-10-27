@@ -11,8 +11,10 @@ constexpr bool runsFullCycle() {
   if (avatar.expression().blinks || demo.update(42099, avatar, false)) return false;
   if (!demo.update(42100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Angry) return false;
   if (!avatar.expression().blinks || demo.update(54099, avatar, false)) return false;
-  if (!demo.update(54100, avatar, false) || avatar.expressionId() != AvatarExpressionId::Neutral) return false;
-  return avatar.openness() == 1 && !avatar.update(57599, false) && avatar.update(57600, false);
+  for(uint8_t i=4;i<static_cast<uint8_t>(AvatarExpressionId::Count);++i)
+    if(!demo.update(54100+(i-4)*12000,avatar,false)) return false;
+  if(avatar.expressionId()!=AvatarExpressionId::Neutral) return false;
+  return avatar.openness() == 1 && !avatar.update(333599, false) && avatar.update(333600, false);
 }
 
 constexpr bool manualPressWinsAtDeadline() {

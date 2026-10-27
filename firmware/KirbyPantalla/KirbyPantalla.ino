@@ -5,11 +5,9 @@
 #include "gaze_animation.h"
 #include "avatar_transition.h"
 #include "avatar_frame.h"
-#include "demo_sequence.h"
 #include "usb_control.h"
 
-// Frontal expressions adapted from the original Avatar Lab export.
-// This does not execute Avatar Lab's web animation engine.
+// Imported catalog with an orthographic renderer adapted for the ESP32 LCD.
 static uint16_t scanline[LCD_WIDTH];
 static AvatarController controller;
 static UsbControl usb;
@@ -22,13 +20,11 @@ static bool blinkPendingPresentation = false;
 static bool gazePendingPresentation = false;
 constexpr int EXPRESSION_BUTTON_PIN = 0;  // Waveshare BOOT, active low.
 
-void drawAvatar(float openness) {
-  const auto& avatar = controller.avatar();
-  const float gazeOffset = avatarGazeOffset(avatar.expression(), controller.gazeOffset());
+void clearDisplay() {
   // Stream one row at a time: no full-screen buffer or microSD needed.
   for (int y = 0; y < LCD_HEIGHT; ++y) {
     for (int x = 0; x < LCD_WIDTH; ++x) {
-      uint16_t color = avatarPixel(x, y, avatar.expression(), openness, gazeOffset);
+      uint16_t color = AVATAR_BACKGROUND;
       scanline[x] = (color >> 8) | (color << 8);
     }
     LCD_SetCursor(0, y, LCD_WIDTH - 1, y);
@@ -44,9 +40,9 @@ void setup() {
   pinMode(EXPRESSION_BUTTON_PIN, INPUT_PULLUP);
   LCD_Init();
   Set_Backlight(70);
-  drawAvatar(controller.avatar().openness());
-  // Prepare the static silhouette before the first animation starts.
+  clearDisplay();
   renderFaceFrame(facePixels, controller.avatar().expression(), controller.avatar().openness(), 0);
+  LCD_addWindow(FACE_X, FACE_Y, FACE_X+FACE_WIDTH-1, FACE_Y+FACE_HEIGHT-1, facePixels);
   controller.start(millis());
 }
 
@@ -54,19 +50,21 @@ void loop() {
   const uint32_t now = millis();
   const auto& avatar = controller.avatar();
   const auto previousExpression = avatar.expressionId();
+  const auto previousVersion = controller.poseVersion();
   const float previousGaze = controller.gazeOffset();
-  const float previousOpenness = avatar.openness();
+  const float previousOpenness = controller.openness();
   bool faceChanged = controller.update(now, digitalRead(EXPRESSION_BUTTON_PIN) == LOW);
   // USB takes priority if a physical button or a demo tick coincides with it.
   usb.poll(Serial, controller, now);
-  const bool expressionChanged = avatar.expressionId() != previousExpression;
-  faceChanged = faceChanged || expressionChanged || avatar.openness() != previousOpenness;
+  const bool expressionChanged = avatar.expressionId() != previousExpression || controller.poseVersion()!=previousVersion;
+  faceChanged = faceChanged || expressionChanged || controller.openness() != previousOpenness;
   if (expressionChanged) {
-    expressionTransition.setTarget(avatar.expression(), now);
+    expressionTransition.setTarget(avatar.expression(), now, controller.transitionMs());
   }
   const bool gazeChanged = controller.gazeOffset() != previousGaze;
   if (gazeChanged || expressionChanged) gazeTransition.setTarget(controller.gazeOffset(), now);
-  if (faceChanged || gazeChanged) {
+  if (faceChanged || gazeChanged || avatar.expression().bodyMotion!=AvatarMotion::None ||
+      avatar.expression().eyeMotion!=AvatarMotion::None) {
     needsFrame = true;
     blinkPendingPresentation = blinkPendingPresentation || faceChanged;
     gazePendingPresentation = gazePendingPresentation || gazeChanged || expressionChanged;
@@ -76,7 +74,7 @@ void loop() {
   // sample was still in motion. Idle states do not redraw continuously.
   if (needsFrame && static_cast<uint32_t>(now - lastFrameAt) >= 33) {
     const AvatarExpression pose = expressionTransition.value(now);
-    renderFaceFrame(facePixels, pose, avatar.openness(), gazeTransition.value(now));
+    renderFaceFrame(facePixels, pose, controller.openness(), gazeTransition.value(now), now);
     LCD_addWindow(FACE_X, FACE_Y, FACE_X+FACE_WIDTH-1, FACE_Y+FACE_HEIGHT-1, facePixels);
     lastFrameAt = now;
     needsFrame = expressionTransition.active(now) || gazeTransition.active(now);

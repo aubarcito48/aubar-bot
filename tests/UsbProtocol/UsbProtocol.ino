@@ -37,10 +37,10 @@ struct FakePort {
 
 void testCommands() {
   UsbProtocol parser;
-  const char* expressions[] = {"EXPRESSION neutral\n", "EXPRESSION contento\n",
-      "EXPRESSION sorprendido\n", "EXPRESSION dormido\n", "EXPRESSION enojado\n"};
+  char message[96];
   for (uint8_t i = 0; i < static_cast<uint8_t>(AvatarExpressionId::Count); ++i) {
-    check(line(parser, expressions[i]) == UsbParseResult::Valid);
+    snprintf(message,sizeof(message),"EXPRESSION %s\n",AVATAR_EXPRESSIONS[i].name);
+    check(line(parser, message) == UsbParseResult::Valid);
     check(parser.command().type == UsbCommandType::Expression &&
           parser.command().expression == static_cast<AvatarExpressionId>(i));
   }
@@ -93,7 +93,7 @@ void testTransportBackpressureAndBudget() {
     if (usb.poll(port, controller, 0)) ++commands;
   }
   check(commands == 2);
-  check(strcmp(port.output, "OK APPLIED EXPRESSION enojado\nOK PONG 2\n") == 0);
+  check(strcmp(port.output, "OK APPLIED EXPRESSION enojado\nOK PONG 3\n") == 0);
 
   UsbControl flooded;
   FakePort floodPort;
@@ -110,7 +110,7 @@ void testTransportBackpressureAndBudget() {
   floodPort.room = 200;
   check(!flooded.poll(floodPort, controller, 0));
   check(flooded.poll(floodPort, controller, 0));
-  check(strcmp(floodPort.output, "ERR LINE_TOO_LONG\nOK PONG 2\n") == 0);
+  check(strcmp(floodPort.output, "ERR LINE_TOO_LONG\nOK PONG 3\n") == 0);
   check(controller.avatar().expressionId() == AvatarExpressionId::Angry);
 }
 

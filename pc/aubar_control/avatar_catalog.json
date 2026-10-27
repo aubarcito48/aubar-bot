@@ -1,0 +1,238 @@
+{
+  "expressions": [
+    {
+      "id": "neutral",
+      "source": "neutral",
+      "label": "Neutral"
+    },
+    {
+      "id": "contento",
+      "source": "joyful-wide",
+      "label": "Contento"
+    },
+    {
+      "id": "sorprendido",
+      "source": "surprised-wide-left",
+      "label": "Sorprendido"
+    },
+    {
+      "id": "dormido",
+      "source": "eyes-closed",
+      "label": "Dormido"
+    },
+    {
+      "id": "enojado",
+      "source": "angry-right",
+      "label": "Enojado"
+    },
+    {
+      "id": "upward-side-glance",
+      "source": "upward-side-glance",
+      "label": "Mirada lateral arriba"
+    },
+    {
+      "id": "downward-gaze",
+      "source": "downward-gaze",
+      "label": "Mirada abajo"
+    },
+    {
+      "id": "skeptical-right",
+      "source": "skeptical-right",
+      "label": "Escéptico derecha"
+    },
+    {
+      "id": "small-attentive",
+      "source": "small-attentive",
+      "label": "Atento pequeño"
+    },
+    {
+      "id": "wide-downward-gaze",
+      "source": "wide-downward-gaze",
+      "label": "Mirada amplia abajo"
+    },
+    {
+      "id": "surprised-left",
+      "source": "surprised-left",
+      "label": "Sorpresa izquierda"
+    },
+    {
+      "id": "sleepy-squint",
+      "source": "sleepy-squint",
+      "label": "Somnoliento"
+    },
+    {
+      "id": "curious-left",
+      "source": "curious-left",
+      "label": "Curioso izquierda"
+    },
+    {
+      "id": "asymmetric-down-right",
+      "source": "asymmetric-down-right",
+      "label": "Asimétrico abajo derecha"
+    },
+    {
+      "id": "attentive-left",
+      "source": "attentive-left",
+      "label": "Atento izquierda"
+    },
+    {
+      "id": "joyful-down-right",
+      "source": "joyful-down-right",
+      "label": "Alegre abajo derecha"
+    },
+    {
+      "id": "skeptical-left",
+      "source": "skeptical-left",
+      "label": "Escéptico izquierda"
+    },
+    {
+      "id": "far-right-glance",
+      "source": "far-right-glance",
+      "label": "Mirada derecha"
+    },
+    {
+      "id": "angry-left",
+      "source": "angry-left",
+      "label": "Enojado izquierda"
+    },
+    {
+      "id": "playful-right",
+      "source": "playful-right",
+      "label": "Juguetón derecha"
+    },
+    {
+      "id": "asymmetric-up-left",
+      "source": "asymmetric-up-left",
+      "label": "Asimétrico arriba izquierda"
+    },
+    {
+      "id": "gentle-downward-gaze",
+      "source": "gentle-downward-gaze",
+      "label": "Mirada suave abajo"
+    },
+    {
+      "id": "wide-down-left",
+      "source": "wide-down-left",
+      "label": "Mirada amplia abajo izquierda"
+    },
+    {
+      "id": "drowsy-closed",
+      "source": "drowsy-closed",
+      "label": "Adormilado"
+    },
+    {
+      "id": "suspicious-right",
+      "source": "suspicious-right",
+      "label": "Sospechoso derecha"
+    },
+    {
+      "id": "shy-downward",
+      "source": "shy-downward",
+      "label": "Tímido"
+    },
+    {
+      "id": "angry-brows",
+      "source": "angry-brows",
+      "label": "Cejas enojadas"
+    },
+    {
+      "id": "uneasy-left",
+      "source": "uneasy-left",
+      "label": "Inquieto izquierda"
+    }
+  ],
+  "animations": [
+    {
+      "id": "sleeping",
+      "label": "Dormir"
+    },
+    {
+      "id": "waking",
+      "label": "Despertar"
+    },
+    {
+      "id": "idle",
+      "label": "Reposo"
+    },
+    {
+      "id": "listening",
+      "label": "Escuchar"
+    },
+    {
+      "id": "thinking",
+      "label": "Pensar"
+    },
+    {
+      "id": "searching",
+      "label": "Buscar"
+    },
+    {
+      "id": "working",
+      "label": "Trabajar"
+    },
+    {
+      "id": "excited",
+      "label": "Entusiasmarse"
+    },
+    {
+      "id": "bored",
+      "label": "Aburrirse"
+    },
+    {
+      "id": "suspicious",
+      "label": "Sospechar"
+    },
+    {
+      "id": "angry",
+      "label": "Enojarse"
+    },
+    {
+      "id": "drowsy",
+      "label": "Adormecerse"
+    },
+    {
+      "id": "happy",
+      "label": "Alegría"
+    },
+    {
+      "id": "curious",
+      "label": "Curiosear"
+    },
+    {
+      "id": "confused",
+      "label": "Confundirse"
+    },
+    {
+      "id": "surprised",
+      "label": "Sorprenderse"
+    },
+    {
+      "id": "proud",
+      "label": "Orgullo"
+    },
+    {
+      "id": "shy",
+      "label": "Timidez"
+    },
+    {
+      "id": "sad",
+      "label": "Tristeza"
+    },
+    {
+      "id": "laughing",
+      "label": "Reír"
+    },
+    {
+      "id": "scared",
+      "label": "Asustarse"
+    },
+    {
+      "id": "playful",
+      "label": "Jugar"
+    },
+    {
+      "id": "celebrate",
+      "label": "Celebrar"
+    }
+  ]
+}

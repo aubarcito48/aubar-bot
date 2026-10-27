@@ -56,7 +56,7 @@ class DeviceSession:
                 except UnicodeDecodeError as exc:
                     raise DeviceError("La respuesta USB no pertenece al protocolo de Aubar Bot.") from exc
             data.extend(byte)
-            if len(data) > 128:
+            if len(data) > 256:
                 raise DeviceError("El dispositivo envió una respuesta demasiado larga.")
         raise DeviceError("El dispositivo no responde. Revisá el cable y volvé a conectar.")
 
@@ -74,10 +74,10 @@ class DeviceSession:
             deadline = time.monotonic() + self._timeout
             while True:
                 reply = self._readline(deadline)
-                if reply == "OK PONG 2":
+                if reply in ("OK PONG 2", "OK PONG 3"):
                     break
                 if reply.startswith("OK PONG "):
-                    raise DeviceError("El firmware usa otra versión del protocolo; se necesita la versión 2.")
+                    raise DeviceError("El firmware usa otra versión del protocolo; se necesita la versión 2 o 3.")
             self.port = port
             return self.status()
         except DeviceError:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import unicodedata
+from .catalog import EXPRESSIONS, ANIMATIONS
 
 
 @dataclass(frozen=True)
@@ -43,4 +44,26 @@ def match_command(text: str) -> VoiceAction | None:
         action = VoiceAction('MODE', argument, f'Modo: {word}')
         for form in (f'modo {word}', f'activa modo {word}', f'activa el modo {word}'):
             actions[form] = action
+    # Explicit catalog prefixes disambiguate a static face from a sequence.
+    for identifier, label in EXPRESSIONS.items():
+        actions['expresion '+normalize(label)] = VoiceAction(
+            'EXPRESSION', identifier, f'Expresión: {label}')
+    aliases = {
+        'sleeping': ('dormir',), 'waking': ('despertar',),
+        'idle': ('reposo',), 'listening': ('escuchar',),
+        'thinking': ('pensar',), 'searching': ('buscar',),
+        'working': ('trabajar',), 'excited': ('entusiasmarse',),
+        'bored': ('aburrirse',), 'suspicious': ('sospechar',),
+        'angry': ('enojarse',), 'drowsy': ('adormecerse',),
+        'happy': ('alegria',), 'curious': ('curiosear',),
+        'confused': ('confundirse',), 'surprised': ('sorprenderse',),
+        'proud': ('orgullo',), 'shy': ('timidez',), 'sad': ('tristeza',),
+        'laughing': ('reir',), 'scared': ('asustarse',),
+        'playful': ('jugar',), 'celebrate': ('celebrar',),
+    }
+    for identifier, words in aliases.items():
+        action = VoiceAction('ANIMATION', identifier, f'Animación: {ANIMATIONS[identifier]}')
+        for word in words:
+            actions[word] = action
+            actions['animacion '+word] = action
     return actions.get(phrase)
