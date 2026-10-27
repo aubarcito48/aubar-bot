@@ -199,6 +199,8 @@ recuperación sin repetir audio. Las pruebas del motor también simulan fallos
 de comunicación y comprueban que el proceso de voz se termine antes de permitir
 otra reproducción.
 La comprobación audible se realiza por separado.
+El [procedimiento de validación del flujo completo](validacion-voz.md) reúne
+los escenarios automáticos y los pasos para comprobar placa, micrófono y voz.
 
 Referencia del tratamiento de texto:
 [SpeechVoiceSpeakFlags de Microsoft SAPI](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125223(v=vs.85)).
