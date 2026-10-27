@@ -39,7 +39,7 @@ class AubarApp:
         self.speech_volume = tk.DoubleVar(value=80)
         self.speech_volume_label = tk.StringVar(value="80 %")
         self.speech_message = tk.StringVar(value="Lista para probar la voz en español.")
-        self.speech_voice = tk.StringVar(value="Se usará la voz en español de Windows.")
+        self.speech_voice = tk.StringVar(value="Voz: Dora · Kokoro local (español)")
         self._speech_future = None
         self._speech_stop_requested = False
         self._speech_is_test = False

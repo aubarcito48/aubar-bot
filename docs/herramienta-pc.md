@@ -21,7 +21,9 @@ La pestaña Micrófono permite capturar audio local sin necesitar conectar la pl
   [vosk-model-small-es-0.42](https://alphacephei.com/vosk/models), para reconocer
   español localmente. El modelo tiene licencia Apache 2.0.
 - Micrófono habilitado en Windows para aplicaciones de escritorio.
-- Internet solo para instalar las dependencias por primera vez.
+- [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx) y el modelo
+  Kokoro v1.0 para la voz femenina Dora en español, instalados por el lanzador.
+- Internet solo para instalar dependencias y descargar modelos por primera vez.
 
 Validado con Python 3.14.3 en Windows y la Waveshare ESP32-S3-LCD-1.47B.
 
@@ -34,8 +36,9 @@ Desde PowerShell, en la raíz del repositorio:
 ```
 
 El lanzador crea `.venv` si no existe, comprueba las dependencias y abre la
-ventana. También descarga el modelo español de unos 39 MB la primera vez,
-verificando su SHA256. No instala paquetes globales de Python. Si Python no está en PATH,
+ventana. También descarga el modelo de reconocimiento español de unos 39 MB
+y el modelo de voz con sus estilos (unos 354 MB) la primera vez, verificando
+sus SHA256. No instala paquetes globales de Python. Si Python no está en PATH,
 se puede indicar su ejecutable:
 
 ```powershell
@@ -48,6 +51,7 @@ También se puede preparar y ejecutar manualmente:
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r pc\requirements.txt
 .\.venv\Scripts\python.exe tools\install_voice_model.py
+.\.venv\Scripts\python.exe tools\install_tts_model.py
 .\.venv\Scripts\python.exe -m pc.aubar_control
 ```
 
@@ -236,8 +240,9 @@ Las poses dormidas conservan los ojos cerrados y también pueden orientarse.
 
 ## Motor de salida de voz
 
-El panel incorpora un motor local de texto a voz en español, independiente de
-los comandos del avatar. La pestaña **Voz** permite activarlo, probar un texto,
+El panel utiliza **Dora**, voz femenina española de Kokoro, que funciona en la
+PC sin internet después de instalar el modelo. Es independiente de los
+comandos del avatar. La pestaña **Voz** permite activarla, probar un texto,
 ajustar el volumen y detener la reproducción. Muestra cuándo está hablando,
 la voz utilizada y los posibles errores sin bloquear el panel ni el USB.
 

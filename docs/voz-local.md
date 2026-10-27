@@ -6,19 +6,37 @@ en una integración futura, texto generado por una IA.
 
 ## Requisitos y funcionamiento
 
-- Windows con PowerShell integrado y una voz **SAPI en español** instalada.
+- Windows con las dependencias de `pc/requirements.txt` instaladas en `.venv`.
 - Parlantes o auriculares seleccionados como salida predeterminada de Windows.
 - Python 3.11 o superior, usando el entorno del proyecto.
 
-No requiere conexión a internet, claves de API, modelos de voz descargados por
-el proyecto ni nuevas dependencias de Python. Selecciona la primera voz SAPI
-en español disponible; no cambia a una voz inglesa si falta una española.
-En la PC de validación se utilizó **Microsoft Sabina Desktop, es-MX**.
+La voz predeterminada es **Dora (`ef_dora`)**, femenina en español, del modelo
+[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M). La lista de voces del
+modelo identifica Dora como española; no se ofrece como una voz argentina.
+Se ejecuta localmente con `kokoro-onnx==0.4.7` y ONNX Runtime en CPU.
 
-El ayudante de PowerShell se ejecuta sin abrir otra ventana y recibe el texto
-mediante JSON por entrada estándar. El texto no se inserta en instrucciones de
-PowerShell ni se interpreta como XML. La reproducción sale por el dispositivo
-predeterminado del sistema, sin crear un archivo de audio.
+El lanzador descarga una sola vez el modelo ONNX de 326 MB y los estilos de
+voz de 28 MB en `models/kokoro-v1.0/`, fuera de Git. Verifica el tamaño y
+SHA256 de ambos archivos y reemplaza descargas incompletas de forma atómica.
+Después de preparar archivos y dependencias no se necesita internet ni una
+clave de API, y el texto no sale de la PC. No hay descargas al reproducir.
+
+El ayudante Python se ejecuta sin abrir otra ventana y recibe el texto mediante
+JSON por entrada estándar. Genera el audio en memoria y lo reproduce por la
+salida predeterminada, sin crear archivos de audio. La síntesis y la reproducción
+se cancelan juntas al terminar ese proceso. Cada pedido carga su modelo en el
+ayudante; puede haber una breve espera antes de empezar a sonar, durante la
+cual la escucha permanece protegida.
+
+La preparación manual, después de instalar `pc/requirements.txt`, es:
+
+```powershell
+.\.venv\Scripts\python.exe tools/install_tts_model.py
+```
+
+Fuentes: [motor ONNX y archivos del modelo](https://github.com/thewh1teagle/kokoro-onnx),
+[voces e idiomas](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md).
+Los pesos Kokoro tienen licencia Apache 2.0; el adaptador ONNX tiene licencia MIT.
 
 ## Probar desde la terminal
 
@@ -36,9 +54,14 @@ panel durante estas pruebas de terminal: el script es independiente del panel
 y no comparte su estado de micrófono. Las reproducciones iniciadas desde el
 panel sí utilizan la coordinación automática descrita abajo.
 
-Si no hay una voz española compatible con SAPI, la herramienta lo informa.
-Las voces disponibles para otros servicios de Windows pueden no estar expuestas
-a SAPI. Después de instalar una compatible, repetir la consulta de voces.
+Si falta el modelo o alguna dependencia, el panel lo informa y se puede preparar
+con `start_control.ps1`. No cambia a Sabina silenciosamente. El motor SAPI
+anterior se conserva para diagnóstico desde terminal:
+
+```powershell
+.\.venv\Scripts\python.exe tools/test_speech.py --engine sapi --list-voices
+.\.venv\Scripts\python.exe tools/test_speech.py --engine sapi
+```
 
 ## Controles en el panel
 
@@ -63,7 +86,7 @@ manual o reconocimiento en curso antes de iniciar una prueba.
 Mientras suena la voz y durante la espera posterior no se puede iniciar una
 captura manual. El panel y las consultas USB siguen funcionando durante el audio.
 
-Si la voz falla o falta una voz española, el estado muestra el error y permite
+Si la voz falla o falta el modelo, el estado muestra el error y permite
 reintentar; la conexión con el ESP32 se mantiene. Los ajustes de esta pestaña
 se conservan durante la sesión del panel.
 
@@ -161,7 +184,9 @@ future = engine.speak("Este texto puede venir de cualquier fuente.")
 
 - `voices()` devuelve un futuro con las voces españolas disponibles.
 - `speak(text, volume=100, rate=0)` admite volumen de 0 a 100 y velocidad
-  SAPI de -10 a 10.
+  de -10 a 10. Dora usa velocidad 0.95 con `rate=0`; los demás valores se
+  convierten en un factor de velocidad entre 0.5 y 2.0. El adaptador SAPI
+  conserva su escala original.
 - El texto debe ser no vacío, de hasta 2000 caracteres y no contener NUL.
 - Se admite una operación a la vez. Un segundo pedido mientras está ocupado
   devuelve `SpeechError`, sin acumular reproducciones.
@@ -201,6 +226,9 @@ otra reproducción.
 La comprobación audible se realiza por separado.
 El [procedimiento de validación del flujo completo](validacion-voz.md) reúne
 los escenarios automáticos y los pasos para comprobar placa, micrófono y voz.
+`tests/pc/test_kokoro.py` comprueba la selección de Dora, texto por JSON,
+volumen, cierre de salida, errores de instalación y descargas verificadas que
+funcionan sin red cuando el modelo ya está preparado.
 
 Referencia del tratamiento de texto:
 [SpeechVoiceSpeakFlags de Microsoft SAPI](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125223(v=vs.85)).

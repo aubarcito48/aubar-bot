@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 from threading import Event, Lock
 
 
@@ -23,7 +24,7 @@ class SpeechVoice:
     language: str
 
 
-class SapiBackend:
+class ProcessSpeechBackend:
     def __init__(self, process_factory=subprocess.Popen):
         self._factory = process_factory
         self._process = None
@@ -31,11 +32,12 @@ class SapiBackend:
         self._closed = False
         self._active_cancel = None
 
+    def _command(self):
+        raise NotImplementedError
+
     def _request(self, payload, timeout=30, cancel_event=None):
         if os.name != 'nt':
-            raise SpeechError('La voz local de esta versión requiere Windows con SAPI.')
-        helper = Path(__file__).with_name('sapi_speech.ps1')
-        executable = Path(os.environ.get('SystemRoot', r'C:\Windows'))/'System32/WindowsPowerShell/v1.0/powershell.exe'
+            raise SpeechError('La voz local de esta versión requiere Windows.')
         process=None
         try:
             with self._lock:
@@ -46,8 +48,7 @@ class SapiBackend:
                 if cancel_event is not None and cancel_event.is_set():
                     raise SpeechCancelled('Reproducción detenida.')
                 process = self._factory(
-                    [str(executable), '-NoLogo', '-NoProfile', '-NonInteractive',
-                     '-ExecutionPolicy', 'Bypass', '-File', str(helper)],
+                    self._command(),
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     encoding='utf-8', creationflags=subprocess.CREATE_NO_WINDOW,
                 )
@@ -68,6 +69,10 @@ class SapiBackend:
             if not response.get('ok'):
                 if response.get('code')=='NO_SPANISH_VOICE':
                     raise SpeechError('No hay una voz SAPI en español disponible. Instalá una voz española compatible en Windows y probá nuevamente.')
+                if response.get('code')=='MODEL_MISSING':
+                    raise SpeechError('Falta el modelo de Dora o está incompleto. Cerrá el panel y abrilo con start_control.ps1 para prepararlo.')
+                if response.get('code')=='DEPENDENCY_MISSING':
+                    raise SpeechError('Faltan dependencias de la voz local. Cerrá el panel y abrilo con start_control.ps1 para instalarlas.')
                 raise SpeechError('No se pudo reproducir la voz. Revisá la salida de audio y las voces de Windows.')
             if process.returncode != 0:
                 raise SpeechError('El motor de voz terminó con un error.')
@@ -80,7 +85,7 @@ class SapiBackend:
             process.communicate()
             raise SpeechError('La reproducción de voz excedió el tiempo de espera y se detuvo.') from exc
         except OSError as exc:
-            raise SpeechError('No se pudo iniciar la voz local de Windows.') from exc
+            raise SpeechError('No se pudo iniciar el motor de voz local.') from exc
         finally:
             # A failed pipe read must not leave a helper (and its audio) alive.
             # Cleanup runs in the speech worker, never in the Tk event loop.
@@ -165,12 +170,29 @@ class SapiBackend:
                     pass
 
 
+class SapiBackend(ProcessSpeechBackend):
+    def _command(self):
+        helper = Path(__file__).with_name('sapi_speech.ps1')
+        executable = Path(os.environ.get('SystemRoot', r'C:\Windows'))/'System32/WindowsPowerShell/v1.0/powershell.exe'
+        return [str(executable), '-NoLogo', '-NoProfile', '-NonInteractive',
+                '-ExecutionPolicy', 'Bypass', '-File', str(helper)]
+
+
+class KokoroBackend(ProcessSpeechBackend):
+    def _command(self):
+        # pythonw has no console streams; a hidden python.exe supplies JSON pipes.
+        executable=Path(sys.executable)
+        if executable.name.lower()=='pythonw.exe':
+            executable=executable.with_name('python.exe')
+        return [str(executable),'-X','utf8',str(Path(__file__).with_name('kokoro_speech.py'))]
+
+
 class SpeechEngine:
     """Submit work from Tk; consume Future results without waiting in Tk."""
     MAX_TEXT_LENGTH = 2000
 
     def __init__(self, backend=None):
-        self.backend = backend or SapiBackend()
+        self.backend = backend or KokoroBackend()
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='aubar-speech')
         self._lock = Lock()
         self._closed = False

@@ -4,15 +4,16 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from pc.aubar_control.speech import SpeechEngine, SpeechError
+from pc.aubar_control.speech import SpeechEngine, SpeechError, SapiBackend
 
 
 def main():
     parser=argparse.ArgumentParser(description='Probar la voz local en español de Aubar.')
     parser.add_argument('--list-voices',action='store_true')
+    parser.add_argument('--engine',choices=('kokoro','sapi'),default='kokoro')
     parser.add_argument('--text',default='Hola, soy Aubar. Esta es mi voz en español.')
     args=parser.parse_args()
-    engine=SpeechEngine()
+    engine=SpeechEngine(SapiBackend()) if args.engine=='sapi' else SpeechEngine()
     try:
         if args.list_voices:
             for voice in engine.voices().result():

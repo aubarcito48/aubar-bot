@@ -33,8 +33,8 @@ interrupción y apagado explícito del micrófono.
 ## Comprobación con la placa y el micrófono
 
 Se necesita la Waveshare ESP32-S3-LCD-1.47B con el firmware del proyecto,
-protocolo USB 4, el modelo español instalado, un micrófono de la PC y una voz
-SAPI española. Usar el puerto de la placa; en la PC de validación es **COM3**.
+protocolo USB 4, el modelo de reconocimiento español y la voz Dora instalados,
+y un micrófono de la PC. Usar el puerto de la placa; en la PC de validación es **COM3**.
 Cerrar otros paneles o monitores serie que estén usando ese puerto.
 
 1. Abrir `.\tools\start_control.ps1`, conectar el dispositivo, elegir el
@@ -91,6 +91,22 @@ en COM3 con protocolo 4.
   confirmó el apagado del micrófono durante la respuesta, reconexión sin
   repeticiones, una orden nueva después de reconectar y cierre del panel
   interrumpiendo el audio.
+
+### Cambio a Dora, voz femenina local
+
+También el 27 de octubre de 2026 se cambió la salida predeterminada a
+**Kokoro v1.0 / `ef_dora`**, ejecutada en CPU con `kokoro-onnx==0.4.7`.
+La validación anterior con Sabina queda como registro de la primera versión.
+
+- **119 pruebas aprobadas** después del cambio, más comprobación de
+  dependencias sin incompatibilidades (`pip check`).
+- Se repitió el recorrido técnico con Vosk real, entrada sintética y COM3,
+  ahora reproduciendo con Dora: expresiones, animaciones, miradas, frases
+  rechazadas, voz desactivada y reconexión sin repeticiones.
+- Se verificó que detener durante la generación termina el ayudante y que
+  el mismo motor vuelve a reproducir una frase nueva.
+- El usuario confirmó la muestra inicial y luego el funcionamiento en el
+  panel con comandos de voz, regreso a la escucha y **Detener**.
 
 El reconocimiento depende del ruido ambiente y de la pronunciación. La escucha
 se pausa mientras Aubar habla: no acepta interrupciones por voz durante su
