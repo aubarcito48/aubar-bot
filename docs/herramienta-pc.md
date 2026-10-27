@@ -242,13 +242,18 @@ umbrales de 0,55 y 0,65 respectivamente. Son filtros heurísticos, no garantías
 de una transcripción perfecta. El silencio, los resultados poco claros o sin
 activación válida no generan consultas.
 
-En esta etapa el panel muestra **Consulta reconocida** y el contenido sin el
-nombre de activación. Todavía no envía esa frase a Groq, no cambia el avatar
-por ella ni reproduce una respuesta. Al terminar vuelve a escuchar si la
-escucha automática sigue activa. La consulta identificada no se acumula para
-enviarla después; una captura nueva, el apagado de la escucha, la desconexión
-o el cierre descartan ese estado. **Probar conexión** en **IA** sigue siendo
-una prueba independiente.
+Con la configuración de Groq lista, una consulta reconocida se envía una sola
+vez a la IA. El panel muestra el estado de procesamiento y la respuesta
+completa en **IA**, compartiendo el contexto de la conversación por texto.
+Con **Activar voz** marcado, Dora lee esa respuesta; luego vuelve a escuchar
+si la escucha automática sigue activa. La captura manual nunca se abre sola.
+Sin configuración válida, informa qué falta y no acumula consultas para
+enviarlas después. **Probar conexión** sigue siendo una prueba independiente.
+
+Ejemplos para conversar: con el botón, decir «contame algo interesante»;
+en escucha automática, «Aubar, contame algo interesante». Una consulta abierta
+no cambia por sí misma la expresión del avatar. Los comandos conocidos, como
+«Aubar, contento», conservan su ejecución local y no se envían a Groq.
 
 El ruido, las voces de fondo o una pronunciación parecida pueden producir
 errores: la palabra de activación reduce las activaciones involuntarias sin
@@ -301,7 +306,9 @@ de seguimiento. **Nueva conversación** borra el contexto de la sesión y
 descarta respuestas anteriores pendientes. Se conservan como máximo seis
 intercambios y 12 000 caracteres de historial; la [guía de Groq](groq.md#personalidad-y-conversación-por-texto)
 detalla la personalidad, los límites y los reinicios. Las consultas reconocidas
-por micrófono todavía no se envían automáticamente a la IA.
+por micrófono se envían al mismo contexto y sus respuestas se leen con Dora
+si la voz está activada. El campo de texto y **Probar conexión** conservan
+su salida como texto, sin reproducción automática.
 
 ## Motor de salida de voz
 

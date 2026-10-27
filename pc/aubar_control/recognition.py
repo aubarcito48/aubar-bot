@@ -81,7 +81,7 @@ class LocalRecognizer:
             return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la frase.')
         if len(text)>1000:
             return RecognitionResult(text,None,'La consulta es demasiado larga. Probá una frase más breve.')
-        return RecognitionResult(text,None,'Consulta reconocida. Todavía no se envía a Groq.',query=text)
+        return RecognitionResult(text,None,'Consulta reconocida.',query=text)
 
     def _automatic_result(self, recording, text, words):
         rejected = RecognitionResult(text, None,
@@ -116,7 +116,7 @@ class LocalRecognizer:
                     return RecognitionResult(text,action,action.label)
                 if len(suffix)>1000:
                     return RecognitionResult(text,None,'La consulta es demasiado larga. Probá una frase más breve.')
-                return RecognitionResult(text,None,'Consulta reconocida. Todavía no se envía a Groq.',query=suffix)
+                return RecognitionResult(text,None,'Consulta reconocida.',query=suffix)
         return rejected
 
     def _detect_aubar(self, recording, command_start, wake_end=None, allow_pause=False):

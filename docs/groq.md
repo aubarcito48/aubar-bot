@@ -96,15 +96,44 @@ Recargar la configuración y cerrar el panel también reinician el contexto.
 No se recuperan conversaciones de una sesión anterior. **Probar conexión**
 mantiene su función de diagnóstico y no cambia lo que recuerda Aubar.
 
-Esta etapa permite conversar **por texto**. Las consultas del micrófono siguen
-identificándose localmente; su conexión con Groq y la reproducción de las
-respuestas con Dora corresponden a la integración siguiente.
+## Conversación con micrófono y Dora
 
-El micrófono ya puede **identificar consultas abiertas** después de «Aubar»,
-como «Aubar, cómo estás». Se muestran localmente como **Consulta reconocida**;
-todavía no se envían a este cliente. Los comandos exactos conservan prioridad
-y siguen ejecutándose en el avatar. La [guía del panel](herramienta-pc.md#identificar-consultas-abiertas)
-detalla la activación, los filtros y los ejemplos.
+Las consultas reconocidas por el micrófono se envían a Groq usando el mismo
+contexto que el campo de texto. Con el botón manual, esperar **Escuchando**,
+decir «contame algo interesante» y soltar. En escucha automática, conectar
+la placa, esperar la calibración y decir **«Aubar, contame algo interesante»**.
+La [guía del panel](herramienta-pc.md#identificar-consultas-abiertas) detalla
+la activación, los filtros y los ejemplos.
+
+El panel informa que está preparando la respuesta y pausa la escucha durante
+esa consulta. Muestra el resultado completo en **IA** y, con **Activar voz**
+marcado, lo reproduce una sola vez con Dora. El volumen se toma al iniciar
+la reproducción. No acepta audio como nuevas frases mientras prepara o lee
+la respuesta. Después del audio conserva la protección de 350 ms y solo
+retoma la escucha automática si sigue activada. La captura manual requiere
+otra pulsación para continuar; también funciona sin conectar el ESP32.
+
+Los comandos exactos del avatar mantienen prioridad y se ejecutan localmente,
+sin consultar a Groq. Una consulta conversacional todavía no selecciona
+expresiones o animaciones; esa integración se implementa por separado.
+Los mensajes escritos y **Probar conexión** siguen mostrando texto sin lectura
+automática. El historial sí se comparte entre preguntas escritas y habladas.
+
+Desactivar la voz o pulsar **Detener** cancela la lectura actual o pendiente.
+Si Groq todavía está respondiendo, el texto exitoso puede mostrarse e ingresar
+al contexto, pero no se leerá después de volver a activar la voz. Un fallo de
+audio tampoco elimina una respuesta válida ni repite la consulta a Groq.
+Si falla la consulta, informa el error, no agrega un turno y vuelve a permitir
+la escucha.
+
+Solo se conserva una lectura de IA pendiente, con vencimiento de 15 segundos.
+Comparte el motor de voz con las confirmaciones del catálogo: espera a que
+termine una reproducción en curso, sin superponer voces. **Nueva conversación**,
+recargar la configuración o cambiar la conexión USB descartan lecturas
+anteriores. Una pregunta capturada antes de un reinicio o cambio de conexión
+no se envía después. Desconectar durante una consulta por voz descarta su
+resultado tardío, sin reejecutarlo al reconectar. Apagar el micrófono durante
+la respuesta lo mantiene apagado al terminar.
 
 El cliente usa HTTPS con validación de certificado y el endpoint oficial
 `https://api.groq.com/openai/v1/chat/completions`. La clave se envía únicamente
@@ -187,6 +216,16 @@ después de reiniciar. Los controles se comprobaron en una ventana de 760 × 650
 El usuario confirmó la conversación por texto, el recuerdo de un dato en una
 pregunta de seguimiento, el borrado mediante **Nueva conversación** y la
 visualización completa de los controles.
+
+La integración de micrófono, IA y voz se validó con **172 pruebas aprobadas**
+y `pip check` correcto. `tests/pc/test_voice_conversation.py` cubre una consulta
+y una respuesta, contexto compartido, descarte del audio propio, recuperación
+de escucha, silencio y detención durante la espera, errores, reinicios,
+reconexión y reproducción compartida con el catálogo sin superposición.
+Se probó con entrada sintética, Vosk/Groq/Dora reales y comandos en COM3.
+El usuario confirmó con su micrófono tanto la conversación manual y sus
+seguimientos como el recorrido automático, la prioridad de los comandos y
+el apagado del micrófono durante la respuesta.
 
 Referencias: [configurar la clave en Groq](https://console.groq.com/docs/quickstart),
 [modelos disponibles](https://console.groq.com/docs/models) y

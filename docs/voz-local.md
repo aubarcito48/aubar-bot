@@ -90,6 +90,19 @@ Si la voz falla o falta el modelo, el estado muestra el error y permite
 reintentar; la conexión con el ESP32 se mantiene. Los ajustes de esta pestaña
 se conservan durante la sesión del panel.
 
+## Respuestas de la IA
+
+Las preguntas del micrófono se envían a Groq y, con **Activar voz** marcado,
+Dora lee el texto generado. Estas respuestas usan `app.speak_text`, el mismo
+volumen, detención y protección de micrófono que las confirmaciones del avatar.
+La escucha se pausa durante la consulta y la reproducción, y vuelve después
+de la protección de 350 ms solo si sigue activada. El texto permanece en **IA**
+si la voz está desactivada o falla. Los errores de audio no repiten la consulta.
+
+La [guía de Groq](groq.md#conversación-con-micrófono-y-dora) describe el contexto,
+los controles, las lecturas pendientes y las diferencias entre entrada por voz
+y por texto.
+
 ## Respuestas a acciones confirmadas
 
 Con **Activar voz** marcado, el panel responde después de recibir la

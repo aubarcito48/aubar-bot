@@ -33,6 +33,14 @@ class AubarApp:
         self.root = root
         self.config_loader=config_loader
         self.ai_service=ai_service or GroqService()
+        self.ai_replies=ReplyQueue()
+        self._ai_origin='probe'
+        self._ai_voice_generation=None
+        self._ai_connection_token=None
+        self._speech_is_ai=False
+        self._capture_ai_generation=0
+        self._capture_ai_voice_generation=0
+        self._capture_query_connection=None
         self.conversation=Conversation()
         self.ai_input=tk.StringVar()
         self._ai_conversation_request=None
@@ -202,6 +210,7 @@ class AubarApp:
 
     def reload_groq_configuration(self):
         self.ai_generation+=1
+        self._discard_ai_speech()
         self.conversation.reset()
         self._ai_conversation_request=None
         state=self.config_loader()
@@ -263,6 +272,7 @@ class AubarApp:
 
     def new_conversation(self):
         self.ai_generation+=1
+        self._discard_ai_speech()
         self.conversation.reset()
         self._ai_conversation_request=None
         self.ai_input.set('')
@@ -272,16 +282,28 @@ class AubarApp:
         self._ai_controls()
 
     def send_ai_message(self):
-        if self.closed or self.groq_config is None or self._ai_future is not None or self.ai_service.busy:
-            return
-        text=self.ai_input.get().replace(self.groq_config.api_key,'[credencial oculta]')
+        self._start_ai_request(self.ai_input.get())
+
+    def _start_ai_request(self,text,*,origin='text',speech_generation=None,connection=None):
+        if self.closed:
+            return False
+        if self.groq_config is None or self._ai_future is not None or self.ai_service.busy:
+            self.ai_message.set(self.groq_config_message.get() if self.groq_config is None else
+                                'Ya hay una consulta a Groq en curso. Esperá a que termine.')
+            return False
+        text=text.replace(self.groq_config.api_key,'[credencial oculta]')
         try:
             request=self.conversation.prepare(text)
         except ValueError as error:
             self.ai_message.set(str(error))
-            return
+            return False
         self._ai_request_generation=self.ai_generation
         self._ai_conversation_request=request
+        self._ai_origin=origin
+        self._ai_voice_generation=speech_generation
+        self._ai_connection_token=connection
+        if origin=='voice':
+            self.automatic_capture.pause()
         try:
             self._ai_future=self.ai_service.submit(self.groq_config,request)
         except GroqError as error:
@@ -290,6 +312,41 @@ class AubarApp:
         else:
             self.ai_message.set('Aubar está preparando una respuesta…')
         self._ai_controls()
+        self._audio_controls()
+        return self._ai_future is not None
+
+    def _send_voice_query(self,text):
+        if (self._capture_ai_generation!=self.ai_generation
+            or self._capture_query_connection!=self.connection_token):
+            self.recognition_message.set('Consulta descartada: el estado cambió durante el reconocimiento.')
+            return
+        sent=self._start_ai_request(text,origin='voice',
+            speech_generation=self._capture_ai_voice_generation,connection=self.connection_token)
+        self.recognition_message.set('Consulta enviada. Aubar está preparando la respuesta…' if sent else self.ai_message.get())
+
+    def _voice_ai_busy(self):
+        return (self._ai_future is not None and self._ai_origin=='voice') or self.ai_replies.pending is not None
+
+    def _discard_ai_speech(self):
+        self.ai_replies.cancel()
+        if self._speech_is_ai:
+            self.stop_speech()
+
+    def _drain_ai_reply(self):
+        reply=self.ai_replies.peek(self.ai_generation)
+        if reply is None:
+            return
+        if self.closed or not self.speech_enabled.get():
+            self.ai_replies.discard()
+            return
+        if self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy:
+            return
+        self.ai_replies.take(self.ai_generation)
+        if self.speak_text(reply.text):
+            self._speech_is_ai=True
+            self.recognition_message.set('Aubar está hablando. La respuesta completa está en IA.')
+        else:
+            self.recognition_message.set('Respuesta disponible en IA. No se pudo iniciar la voz.')
 
     def _show_ai_response(self,text):
         self.ai_response.configure(state='normal')
@@ -303,6 +360,7 @@ class AubarApp:
             return
         self._show_ai_response(self.conversation.transcript)
         self._ai_conversation_request=None
+        self._ai_origin='probe'
         self._ai_request_generation=self.ai_generation
         try:
             self._ai_future=self.ai_service.submit(self.groq_config,TEST_QUERY)
@@ -318,14 +376,20 @@ class AubarApp:
             return
         self._ai_future=None
         request=self._ai_conversation_request
+        origin=self._ai_origin
+        voice_generation=self._ai_voice_generation
         self._ai_conversation_request=None
-        stale=self._ai_request_generation!=self.ai_generation
+        stale=(self._ai_request_generation!=self.ai_generation or
+               origin=='voice' and self._ai_connection_token!=self.connection_token)
+        failed=False
         try:
             text=future.result()
         except (CancelledError,GroqError) as error:
+            failed=True
             if not stale:
                 self.ai_message.set(str(error) if isinstance(error,GroqError) else 'La prueba fue cancelada.')
         except Exception:
+            failed=True
             if not stale:
                 self.ai_message.set('No se pudo completar la prueba de Groq. Podés intentar nuevamente.')
         else:
@@ -335,14 +399,22 @@ class AubarApp:
                         self._ai_controls()
                         return
                     self._show_ai_response(self.conversation.transcript)
-                    self.ai_input.set('')
+                    if origin=='text':
+                        self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
+                    if origin=='voice':
+                        self.recognition_message.set('Respuesta disponible en IA.')
+                        if self.speech_enabled.get() and voice_generation==self.ai_replies.generation:
+                            self.ai_replies.put(text,self.ai_generation,voice_generation)
                 else:
                     transcript=self.conversation.transcript
                     self._show_ai_response(transcript+'\n\nPrueba de conexión: '+text if transcript else text)
                     self.ai_message.set('Conexión comprobada: Groq respondió usando el modelo configurado.')
                 self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
+        if origin=='voice' and not stale and failed:
+            self.recognition_message.set(self.ai_message.get())
         self._ai_controls()
+        self._audio_controls()
 
     def _build_speech(self, panel):
         panel.columnconfigure(0, weight=1)
@@ -396,14 +468,18 @@ class AubarApp:
 
     def _speech_controls(self):
         active=self._speech_future is not None or self.speech.busy
-        pending=self._pending_reply is not None
+        pending=self._pending_reply is not None or self.ai_replies.pending is not None
+        ai_waiting=(self._ai_future is not None and self._ai_origin=='voice')
         enabled=self.speech_enabled.get()
+        ai_voice_waiting=ai_waiting and self._ai_voice_generation==self.ai_replies.generation and enabled
         microphone_busy=self.audio_phase!='idle'
-        self.speech_test_button.configure(state="normal" if enabled and not active and not pending and not microphone_busy else "disabled")
-        self.speech_stop_button.configure(state="normal" if (active or pending) and not self._speech_stop_requested else "disabled")
+        self.speech_test_button.configure(state="normal" if enabled and not active and not pending and not microphone_busy and not ai_waiting else "disabled")
+        self.speech_stop_button.configure(state="normal" if (active or pending or ai_voice_waiting) and not self._speech_stop_requested else "disabled")
         self.speech_volume_scale.configure(state="normal" if enabled and not active else "disabled")
         self.speech_text.configure(state="normal" if enabled and not active else "disabled")
-        if pending:
+        if ai_waiting:
+            self.speech_hint.configure(text="Aubar está preparando una respuesta. Detener descarta su lectura en voz alta.")
+        elif pending:
             self.speech_hint.configure(text="Hay una respuesta pendiente. Se conserva solo la más reciente, por hasta 15 segundos.")
         elif microphone_busy:
             self.speech_hint.configure(text="Terminá la captura o el reconocimiento para probar la voz.")
@@ -435,6 +511,7 @@ class AubarApp:
             self._audio_controls()
             return False
         self._speech_is_test=is_test
+        self._speech_is_ai=False
         self._speech_stop_requested=False
         preview=' '.join(text.split())
         if len(preview)>160:
@@ -444,8 +521,9 @@ class AubarApp:
         return True
 
     def stop_speech(self):
-        had_pending=self._pending_reply is not None
+        had_pending=self._pending_reply is not None or self._voice_ai_busy()
         self.replies.cancel()
+        self.ai_replies.cancel()
         if self.closed or not self.speech.busy and self._speech_future is None:
             if not self.closed and had_pending:
                 self._speech_message("Respuesta pendiente descartada.")
@@ -490,12 +568,15 @@ class AubarApp:
                                  "Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
         self._speech_stop_requested=False
         self._speech_response_token=None
+        if self._speech_is_ai:
+            self.recognition_message.set(self.speech_message.get()+' Respuesta disponible en IA.')
+        self._speech_is_ai=False
         self.playback_gate.finish(self._speech_playback_token)
         self._speech_playback_token=None
         self._audio_controls()
 
     def _microphone_blocked(self):
-        return self.playback_gate.blocked or self._speech_future is not None or self.speech.busy
+        return self.playback_gate.blocked or self._speech_future is not None or self.speech.busy or self._voice_ai_busy()
 
     def _refresh_playback_gate(self):
         blocked=self._microphone_blocked()
@@ -666,6 +747,9 @@ class AubarApp:
         self.last_recording = None
         self.capture_connection_token = self.connection_token if self.connected else None
         self._capture_reply_generation = self.replies.generation
+        self._capture_ai_generation=self.ai_generation
+        self._capture_ai_voice_generation=self.ai_replies.generation
+        self._capture_query_connection=self.connection_token
         self.recognized_action = None
         self.recognized_query = None
         self.recognition_text.set("Esperando la captura…")
@@ -763,6 +847,8 @@ class AubarApp:
                             self.talk_button.configure(text='Esperando confirmación…')
                         else:
                             self.recognition_message.set('Acción no enviada. Conectá el ESP32 y repetí la frase.')
+                    elif result.query is not None:
+                        self._send_voice_query(result.query)
                 if self.audio_phase == "idle":
                     self.talk_button.configure(text="Mantené pulsado para hablar")
                     self.level_bar['value'] = 0
@@ -859,7 +945,8 @@ class AubarApp:
         if self._microphone_blocked() or self._pending_reply is not None:
             capture.pause()
             self.level_bar['value']=0
-            self.audio_message.set('Escucha en pausa mientras Aubar habla…' if self.playback_gate.active or self.speech.busy else
+            self.audio_message.set('Aubar está preparando la respuesta. Escucha en pausa…' if self._voice_ai_busy() else
+                                  'Escucha en pausa mientras Aubar habla…' if self.playback_gate.active or self.speech.busy else
                                    'Esperando un instante antes de volver a escuchar…')
             return
         try:
@@ -873,6 +960,9 @@ class AubarApp:
             generation = self.auto_generation
             self.capture_connection_token = self.connection_token
             self._capture_reply_generation=self.replies.generation
+            self._capture_ai_generation=self.ai_generation
+            self._capture_ai_voice_generation=self.ai_replies.generation
+            self._capture_query_connection=self.connection_token
             self.last_recording = None  # No continuous audio retained by the UI.
             self.recognized_action = None
             self.recognized_query = None
@@ -953,6 +1043,7 @@ class AubarApp:
 
     def _invalidate_connection(self):
         self.connection_token += 1
+        self._discard_ai_speech()
         self.recognized_query=None
         self.replies.cancel()
         if self._speech_response_token is not None:
@@ -1064,6 +1155,7 @@ class AubarApp:
         self._drain_ai()
         self._drain_speech()
         self._drain_reply()
+        self._drain_ai_reply()
         self._speech_controls()
         self._refresh_playback_gate()
         self._tick_automatic()
@@ -1081,6 +1173,7 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.ai_replies.cancel()
         self.recognized_query=None
         self.ai_generation+=1
         self.conversation.reset()
