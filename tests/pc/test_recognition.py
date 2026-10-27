@@ -41,7 +41,7 @@ class FakeBackend:
         self.models += 1
         return object()
 
-    def KaldiRecognizer(self, model, rate):
+    def KaldiRecognizer(self, model, rate, grammar=None):
         self.rate = rate
         return FakeDecoder(self)
 

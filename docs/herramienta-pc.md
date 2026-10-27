@@ -166,12 +166,13 @@ ejecutarse al reconectar. Volver a hablar para enviar una orden nueva.
 ## Escucha automática con «Aubar»
 
 1. Conectar el ESP32 en **Dispositivo** y elegir la entrada en **Micrófono**.
-2. Activar **Escucha automática · «Aubar» + comando**. Esperar la breve
+2. Activar **Escucha automática · «Aubar» + comando o pregunta**. Esperar la breve
    calibración del ruido ambiente sin hablar.
 3. Cuando indique **Escucha automática activa**, decir una frase completa como
    **«Aubar, contento»**, **«Aubar, celebrar»** o **«Aubar, mirá a la izquierda»**.
 4. Hacer una pausa de **0,8 segundos**: el panel transcribe, comprueba el nombre
-   y el comando, y espera la confirmación del ESP32 antes de volver a escuchar.
+   y la frase. Para un comando, espera la confirmación del ESP32 antes de
+   volver a escuchar; una consulta abierta se identifica localmente.
 
 No hay que mantener pulsado el botón. En este modo un comando sin «Aubar» no
 actúa. El modo manual sigue disponible al apagar la casilla, y conserva sus
@@ -183,7 +184,7 @@ hay que activarla nuevamente; no se ejecutan frases pendientes de una conexión
 anterior. Desactivarla también descarta reconocimientos que aún no se enviaron.
 Una orden que ya fue enviada puede terminar de aplicarse.
 
-La detección usa el nivel de audio y conserva hasta 300 ms previos al comienzo
+La detección usa el nivel de audio y conserva hasta 500 ms previos al comienzo
 para no recortar las primeras sílabas. Descarta sonidos breves y frases que
 superen 10 segundos, en vez de actuar sobre una frase truncada. Mientras se
 reconoce o ejecuta una acción se pausa la recepción de nuevas frases. El audio
@@ -199,6 +200,51 @@ el audio del nombre se comprueba por separado. Por eso el texto mostrado puede
 diferir del nombre aunque la orden sea válida. Este mecanismo usa la
 [adaptación de vocabulario de Vosk](https://alphacephei.com/vosk/adaptation);
 no modifica ni reemplaza el modelo descargado.
+
+Si la transcripción omite el nombre por completo y muestra solamente
+«contento», el reconocedor también comprueba el audio anterior a esa primera
+palabra. Solo acepta la activación si verifica allí el sonido de «Aubar»;
+decir «contento» sin el nombre sigue sin activar la escucha automática.
+El audio previo de 500 ms ayuda a conservar una activación más suave que el
+resto de la frase. Si el nombre no llegó a capturarse, se descarta el resultado
+en lugar de inferirlo a partir del comando.
+
+## Identificar consultas abiertas
+
+La sección **Lo que escuché** distingue los comandos del avatar de preguntas
+y frases conversacionales. Ejemplos:
+
+| Frase | Resultado |
+| --- | --- |
+| «Aubar, cómo estás» | Consulta: «cómo estás». |
+| «Aubar, contame algo interesante» | Consulta: «contame algo interesante». |
+| «Aubar, hola» | Consulta: «hola». |
+| «Aubar, enojado derecha» | Comando local, con prioridad sobre la conversación. |
+| «Aubar, no te pongas enojado» | Consulta; no ejecuta la expresión enojada. |
+| «Cómo estás» sin el nombre | No se activa una consulta. |
+| «Aubar» sin otra palabra | No genera una consulta ni una acción. |
+
+Las consultas requieren **«Aubar» tanto en captura manual como automática**.
+Los comandos manuales conservan sus formas anteriores sin exigir el nombre.
+El nombre se verifica con el audio, sin convertir «ayudar» en un alias de texto.
+Se admite una pausa de hasta 0,6 segundos después del nombre dentro de la misma
+frase; una pausa de 0,8 segundos termina la captura. La comprobación también
+alinea el final del nombre con la transcripción para no recortar una palabra
+de la pregunta ni convertir una negación en un comando.
+
+Las consultas aceptadas tienen hasta 1000 caracteres, confianza mínima por
+palabra de 0,35 y promedio de 0,55. Los comandos automáticos mantienen los
+umbrales de 0,55 y 0,65 respectivamente. Son filtros heurísticos, no garantías
+de una transcripción perfecta. El silencio, los resultados poco claros o sin
+activación válida no generan consultas.
+
+En esta etapa el panel muestra **Consulta reconocida** y el contenido sin el
+nombre de activación. Todavía no envía esa frase a Groq, no cambia el avatar
+por ella ni reproduce una respuesta. Al terminar vuelve a escuchar si la
+escucha automática sigue activa. La consulta identificada no se acumula para
+enviarla después; una captura nueva, el apagado de la escucha, la desconexión
+o el cierre descartan ese estado. **Probar conexión** en **IA** sigue siendo
+una prueba independiente.
 
 El ruido, las voces de fondo o una pronunciación parecida pueden producir
 errores: la palabra de activación reduce las activaciones involuntarias sin

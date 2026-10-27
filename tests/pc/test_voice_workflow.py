@@ -105,8 +105,10 @@ class VoiceWorkflowTests(unittest.TestCase):
         self.finish_response()
         for text in ('contento','aubar hoy hace frio','aubar no te pongas contento'):
             self.phrase(text)
-            self.pump(lambda:self.app.recognition_text.get()==text)
+            expected=text.removeprefix('aubar ')
+            self.pump(lambda:self.app.recognition_text.get()==expected)
             self.pump(lambda:self.app.automatic_capture.listening.is_set())
+            self.assertEqual(self.app.recognized_query,expected if text.startswith('aubar ') else None)
             self.assertEqual(len(self.actions()),1)
             self.assertEqual(len(self.voice.calls),1)
         self.phrase('aubar celebrar izquierda')

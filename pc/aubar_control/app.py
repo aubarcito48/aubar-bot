@@ -75,8 +75,9 @@ class AubarApp:
         self.last_recording = None
         self.recognizer = recognizer or LocalRecognizer()
         self.recognized_action = None
+        self.recognized_query = None
         self.recognition_text = tk.StringVar(value="Todavía no hay una frase reconocida.")
-        self.recognition_message = tk.StringVar(value="Probá «enojado derecha» o «celebrar izquierda». En automática, empezá con «Aubar».")
+        self.recognition_message = tk.StringVar(value="Probá un comando o «Aubar, cómo estás». En automática, empezá con «Aubar».")
         self.mic_value = tk.StringVar()
         self.audio_message = tk.StringVar(value="Buscando micrófonos…")
         self.connected = False
@@ -532,7 +533,7 @@ class AubarApp:
         self.mic_scan_button.grid(row=1, column=1)
         modes = ttk.Frame(panel)
         modes.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 8))
-        self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · «Aubar» + comando",
+        self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · «Aubar» + comando o pregunta",
             variable=self.auto_enabled, command=self.toggle_automatic)
         self.auto_check.pack(anchor="w")
         ttk.Label(modes, text="Automática: hablá y hacé una pausa. Manual: mantené pulsado el botón.",
@@ -606,6 +607,7 @@ class AubarApp:
         self.capture_connection_token = self.connection_token if self.connected else None
         self._capture_reply_generation = self.replies.generation
         self.recognized_action = None
+        self.recognized_query = None
         self.recognition_text.set("Esperando la captura…")
         self.recognition_message.set("")
         self.capture.arm()
@@ -646,6 +648,7 @@ class AubarApp:
                     self.audio_scan_busy = False
                     self.last_recording = None
                     self.recognized_action = None
+                    self.recognized_query = None
                     self.recognition_text.set("—")
                     self.recognition_message.set(str(error))
                     self.audio_message.set(str(error))
@@ -688,7 +691,8 @@ class AubarApp:
                 elif operation == "recognized":
                     self.audio_phase = "idle"
                     self.recognized_action = result.action
-                    self.recognition_text.set(result.text or "—")
+                    self.recognized_query = result.query
+                    self.recognition_text.set(result.query or result.text or "—")
                     self.recognition_message.set(result.message)
                     if result.action is not None:
                         if self.connected and self.capture_connection_token == self.connection_token:
@@ -730,7 +734,7 @@ class AubarApp:
         self.automatic_capture.arm()
         self.audio_phase = 'auto_starting'
         self.audio_message.set('Preparando escucha automática…')
-        self.recognition_message.set('Decí «Aubar, enojado derecha» o «Aubar, celebrar izquierda» cuando esté lista.')
+        self.recognition_message.set('Decí «Aubar, enojado derecha» o «Aubar, cómo estás» cuando esté lista.')
         self._audio_controls()
         self._audio_submit('auto_start', lambda: (generation, self.automatic_capture.start(device.index)))
 
@@ -742,6 +746,7 @@ class AubarApp:
         self.automatic_capture.cancel()
         self.automatic_capture.pause()
         self.capture_connection_token = None
+        self.recognized_query = None
         self.pending_action = None
         self._pending_action_reply_generation=None
         self.audio_phase = 'auto_stopping'
@@ -810,11 +815,12 @@ class AubarApp:
             self._capture_reply_generation=self.replies.generation
             self.last_recording = None  # No continuous audio retained by the UI.
             self.recognized_action = None
+            self.recognized_query = None
             self.audio_phase = 'auto_recognizing'
             self.audio_message.set('Frase terminada. Reconociendo…')
             self.level_bar['value'] = 0
             self.recognition_text.set('Procesando la voz…')
-            self.recognition_message.set('Comprobando «Aubar» y el comando…')
+            self.recognition_message.set('Comprobando «Aubar» y la frase…')
             self._audio_controls()
             self._audio_submit('auto_recognized', lambda: (
                 generation, self.recognizer.recognize_automatic(recording)))
@@ -827,7 +833,7 @@ class AubarApp:
             self.level_bar['value'] = capture.level*100
             self.audio_message.set('Calibrando ruido ambiente… Esperá un instante sin hablar.' if capture.calibrating else
                                    'Voz detectada. Hacé una pausa al terminar…' if capture.speaking else
-                                   'Escucha automática activa. Decí «Aubar» seguido de un comando.')
+                                   'Escucha automática activa. Decí «Aubar» seguido de un comando o una pregunta.')
 
     def _controls(self):
         def enable(widget, allowed):
@@ -887,6 +893,7 @@ class AubarApp:
 
     def _invalidate_connection(self):
         self.connection_token += 1
+        self.recognized_query=None
         self.replies.cancel()
         if self._speech_response_token is not None:
             self.stop_speech()
@@ -1014,6 +1021,7 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.recognized_query=None
         self.ai_generation+=1
         self._ai_future=None
         self.ai_service.close()

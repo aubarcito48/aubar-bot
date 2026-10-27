@@ -63,6 +63,12 @@ se informa si Groq respondió correctamente. Funciona sin conectar el ESP32.
 Los comandos de voz, Dora y el control USB siguen disponibles; esta prueba
 todavía no incorpora conversación por micrófono, historial ni voz de la IA.
 
+El micrófono ya puede **identificar consultas abiertas** después de «Aubar»,
+como «Aubar, cómo estás». Se muestran localmente como **Consulta reconocida**;
+todavía no se envían a este cliente. Los comandos exactos conservan prioridad
+y siguen ejecutándose en el avatar. La [guía del panel](herramienta-pc.md#identificar-consultas-abiertas)
+detalla la activación, los filtros y los ejemplos.
+
 El cliente usa HTTPS con validación de certificado y el endpoint oficial
 `https://api.groq.com/openai/v1/chat/completions`. La clave se envía únicamente
 en el encabezado de autorización, no en el texto de la consulta. No sigue
@@ -101,6 +107,21 @@ La integración del cliente añade `tests/pc/test_groq_client.py`: verifica
 solicitudes y errores HTTP con transporte simulado, límite de respuesta y
 tiempo, ausencia de reintentos, ocultamiento de claves, continuidad de Tk/USB,
 recarga de configuración y cierre. No usa la clave real en pruebas automáticas.
+
+La identificación de consultas añade `tests/pc/test_queries.py` y amplía las
+pruebas del detector: prioridad de comandos, activación obligatoria, consulta
+manual y automática, filtrado por confianza y ausencia de solicitudes a Groq.
+También cubre una activación más suave que el comando y la omisión del nombre
+en la transcripción, que solo se admite si el audio previo lo verifica.
+
+Tras estos cambios se aprobaron **151 pruebas**. Se verificaron consultas y
+comandos con Vosk real, entrada sintética y COM3, sin llamadas a Groq. Además
+se simuló la omisión del nombre en la transcripción conservando el audio real
+de prueba: el verificador fonético recuperó la activación y siguió rechazando
+las frases cuyo audio no contiene el nombre.
+El usuario confirmó con su micrófono que «Aubar, contento» vuelve a ejecutar
+el comando y responder con Dora, y que «Aubar, cómo estás» se identifica como
+consulta después de la corrección del inicio de captura.
 
 Validación del cliente del 27 de octubre de 2026: **139 pruebas aprobadas**,
 `pip check` correcto y una consulta real desde el panel usando la configuración

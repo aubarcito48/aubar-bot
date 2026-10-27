@@ -10,7 +10,7 @@ from .audio import AudioError, MicrophoneCapture, Recording
 
 class SpeechSegmenter:
     FRAME_MS = 20
-    PRE_ROLL = 15
+    PRE_ROLL = 25
     START_FRAMES = 3
     END_FRAMES = 40
     MIN_VOICE_FRAMES = 9
