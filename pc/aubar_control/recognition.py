@@ -1,12 +1,14 @@
-"""Offline, unrestricted Spanish transcription followed by exact intent matching."""
+"""Offline Spanish transcription and direct command/query routing."""
 from array import array
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 
 from .voice_commands import VoiceAction, match_command, normalize
+from .youtube import YouTubeAction, match_youtube_command
 
-MODEL_PATH = Path(__file__).resolve().parents[2] / 'models/vosk-model-small-es-0.42'
+MODEL_PATH = Path(__file__).resolve().parents[2] / 'models/vosk-model-es-0.42'
 
 
 class RecognitionError(Exception):
@@ -18,6 +20,8 @@ class RecognitionResult:
     text: str
     action: VoiceAction | None
     message: str
+    query: str | None = None
+    youtube: YouTubeAction | None = None
 
 
 class LocalRecognizer:
@@ -25,26 +29,35 @@ class LocalRecognizer:
         self.model_path = Path(model_path)
         self.backend = backend
         self.model = None
+        # Full Vosk models have a static graph: runtime grammars are unsupported.
+        # Injected test decoders can provide their own grammar implementation.
+        self.supports_grammar = backend is not None or (self.model_path / 'graph/HCLr.fst').is_file()
 
     def recognize_automatic(self, recording):
-        return self.recognize(recording, require_wake=True)
+        return self.recognize(recording, automatic=True)
 
-    def recognize(self, recording, require_wake=False):
-        if not recording.pcm or len(recording.pcm) % 2 or recording.sample_rate <= 0:
-            raise RecognitionError('La captura no tiene un formato de audio válido.')
-        samples = array('h')
-        samples.frombytes(recording.pcm)
-        if max(abs(value) for value in samples) < 150:
-            return RecognitionResult('', None, 'No se detectó voz. Revisá el micrófono y hablá de nuevo.')
+    def prepare(self):
         if self.backend is None:
             if not (self.model_path / 'am/final.mdl').is_file():
                 raise RecognitionError('Falta el modelo de español. Cerrá el panel y abrilo con start_control.ps1.')
             import vosk
             self.backend = vosk
             self.backend.SetLogLevel(-1)
-        try:
-            if self.model is None:
+        if self.model is None:
+            try:
                 self.model = self.backend.Model(str(self.model_path))
+            except Exception:
+                raise RecognitionError('No se pudo preparar el modelo de español. Cerrá el panel y abrilo con start_control.ps1.') from None
+
+    def recognize(self, recording, *, automatic=False):
+        if not recording.pcm or len(recording.pcm) % 2 or recording.sample_rate <= 0:
+            raise RecognitionError('La captura no tiene un formato de audio válido.')
+        samples = array('h')
+        samples.frombytes(recording.pcm)
+        if max(abs(value) for value in samples) < 150:
+            return RecognitionResult('', None, 'No se detectó voz. Revisá el micrófono y hablá de nuevo.')
+        self.prepare()
+        try:
             decoder = self.backend.KaldiRecognizer(self.model, recording.sample_rate)
             decoder.SetWords(True)
             parts = []
@@ -58,41 +71,78 @@ class LocalRecognizer:
         words = [word for part in parts for word in part.get('result', [])]
         if not text:
             return RecognitionResult('', None, 'No se entendió la voz. Acercate al micrófono y repetí la frase.')
-        if require_wake:
-            return self._automatic_result(recording, text, words)
         confidences = [float(word.get('conf', 0)) for word in words]
-        if not confidences or min(confidences) < 0.35 or sum(confidences)/len(confidences) < 0.45:
+        if (len(words)!=len(text.split()) or not confidences
+            or any(not math.isfinite(value) or not 0<=value<=1 for value in confidences)
+            or min(confidences) < 0.35 or sum(confidences)/len(confidences) < 0.45):
             return RecognitionResult(text, None, 'La voz no se reconoció con claridad. Repetí el comando.')
         action = match_command(text)
-        return RecognitionResult(text, action, action.label if action else 'Frase no reconocida como comando.')
+        if action is not None:
+            if automatic and (min(confidences)<.55 or sum(confidences)/len(confidences)<.65):
+                return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la frase.')
+            return RecognitionResult(text,action,action.label)
+        youtube = match_youtube_command(text)
+        if youtube is not None:
+            if (any(not math.isfinite(value) or not 0<=value<=1 for value in confidences)
+                or min(confidences)<.55 or sum(confidences)/len(confidences)<.65):
+                return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la frase.')
+            return RecognitionResult(text,None,'Comando de YouTube reconocido.',youtube=youtube)
+        activated=self._optional_name_result(recording,text,words)
+        if activated.query is not None or activated.youtube is not None or activated.action is not None:
+            return activated
+        # Both capture modes accept direct speech. If the optional name was
+        # misheard, strip it only with acoustic proof, never a guessed alias.
+        if normalize(text) in ('aubar','au bar','a un bar'):
+            return activated
+        if (any(not math.isfinite(value) or not 0<=value<=1 for value in confidences)
+            or min(confidences)<.35 or sum(confidences)/len(confidences)<.55):
+            return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la frase.')
+        if len(text)>1000:
+            return RecognitionResult(text,None,'La consulta es demasiado larga. Probá una frase más breve.')
+        return RecognitionResult(text,None,'Consulta reconocida.',query=text)
 
-    def _automatic_result(self, recording, text, words):
-        rejected = RecognitionResult(text, None, 'Sin acción. Decí «Aubar» seguido de un comando, por ejemplo «Aubar, contento».')
-        # The command must be present in unrestricted transcription. A focused
-        # wake decoder is never allowed to invent the command from arbitrary audio.
+    def _optional_name_result(self, recording, text, words):
+        rejected = RecognitionResult(text, None,
+            'Decí un comando o una pregunta, no solamente el nombre.')
+        # Both commands and queries must come from unrestricted transcription.
+        # The focused decoder verifies only the activation sound and its boundary.
         tokens = text.split()
-        if len(words)!=len(tokens):
+        if len(words)!=len(tokens) or normalize(text) in ('aubar','au bar','a un bar'):
             return rejected
-        for first in range(1, min(4,len(tokens))):
+        for first in range(min(4,len(tokens))):
             suffix = ' '.join(tokens[first:])
             if normalize(tokens[first]) in ('aubar','kirby'):
-                continue
-            action = match_command(suffix)
-            if action is None:
-                continue
-            confidence = [float(word.get('conf',0)) for word in words[first:]]
-            if min(confidence)<.55 or sum(confidence)/len(confidence)<.65:
-                continue
+                if first==0:
+                    continue
+                return rejected
             if normalize(' '.join(tokens[:first]))=='aubar':
                 wake = all(float(word.get('conf',0))>=.6 for word in words[:first])
             else:
                 start = float(words[first].get('start',0))
-                wake = self._detect_aubar(recording, start) if .15<=start<=2.2 else False
+                wake_end=float(words[first-1].get('end',start)) if first else None
+                # Unrestricted ASR may omit the name entirely. It may only be
+                # recovered from verified sound before the first transcribed word.
+                wake = self._detect_aubar(recording,start,wake_end,allow_pause=first==0) if .15<=start<=2.2 else False
             if wake:
-                return RecognitionResult(text, action, action.label)
+                action=match_command(suffix)
+                youtube=match_youtube_command(suffix)
+                confidence=[float(word.get('conf',0)) for word in words[first:]]
+                floor=.55 if action is not None or youtube is not None else .35
+                if (any(not math.isfinite(value) or not 0<=value<=1 for value in confidence)
+                    or min(confidence)<floor or sum(confidence)/len(confidence)<(.65 if action is not None or youtube is not None else .55)):
+                    return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la frase.')
+                if action is not None:
+                    return RecognitionResult(text,action,action.label)
+                if youtube is not None:
+                    return RecognitionResult(text,None,'Comando de YouTube reconocido.',youtube=youtube)
+                if len(suffix)>1000:
+                    return RecognitionResult(text,None,'La consulta es demasiado larga. Probá una frase más breve.')
+                return RecognitionResult(text,None,'Consulta reconocida.',query=suffix)
         return rejected
 
-    def _detect_aubar(self, recording, command_start):
+    def _detect_aubar(self, recording, command_start, wake_end=None, allow_pause=False):
+        if not self.supports_grammar:
+            return False
         # "Aubar" is absent from the shipped Spanish dictionary. Its spoken
         # sounds can be decoded as the existing tokens "au bar". Keep [unk]
         # available, require both tokens and reject any other leading speech.
@@ -111,7 +161,12 @@ class LocalRecognizer:
         if min(float(au.get('conf',0)),float(bar.get('conf',0)))<.75:
             return False
         start, end = float(au.get('start',0)), float(bar.get('end',0))
-        if not (start<=.6 and .15<=end-start<=1.5 and abs(end-command_start)<=.15):
+        # Match the end of the transcribed prefix, not the next word's start:
+        # a natural pause after the name must not discard or swallow query words.
+        boundary=command_start if wake_end is None else wake_end
+        aligned=abs(end-boundary)<=.15 or (allow_pause and wake_end is None)
+        if not (start<=.6 and .15<=end-start<=1.5 and aligned
+                and -.15<=command_start-end<=.6):
             return False
         if float(bar.get('start',0))-float(au.get('end',0))>.15:
             return False

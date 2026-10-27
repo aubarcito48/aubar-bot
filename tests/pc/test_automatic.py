@@ -30,20 +30,28 @@ class SegmentationTests(unittest.TestCase):
         detector=SpeechSegmenter(16000)
         for _ in range(100):
             self.assertIsNone(detector.feed(pcm(.1)))
-        self.assertLessEqual(len(detector.pre_roll),15)
+        self.assertLessEqual(len(detector.pre_roll),25)
         voice=pcm(.5,4000)
         self.assertIsNone(detector.feed(voice))
         self.assertIsNone(detector.feed(pcm(.78)))
         recording=detector.feed(pcm(.02))
         self.assertIsInstance(recording,Recording)
         self.assertIn(voice,recording.pcm)
-        self.assertAlmostEqual(recording.duration,1.54,places=2)
+        self.assertAlmostEqual(recording.duration,1.74,places=2)
         self.assertFalse(detector.active)
 
     def test_clicks_and_short_sounds_are_rejected(self):
         detector=SpeechSegmenter(16000)
         self.assertIsNone(detector.feed(pcm(.04,10000)+pcm(1)))
         self.assertIsNone(detector.feed(pcm(.1,10000)+pcm(1)))
+
+    def test_soft_activation_before_a_louder_command_is_preserved_completely(self):
+        detector=SpeechSegmenter(16000)
+        detector.feed(pcm(1))
+        activation=pcm(.36,200)
+        recording=detector.feed(activation+pcm(.5,4000)+pcm(.8))
+        self.assertIsInstance(recording,Recording)
+        self.assertIn(activation,recording.pcm)
 
     def test_continuous_noise_is_dropped_instead_of_executing_a_truncated_command(self):
         detector=SpeechSegmenter(16000)
@@ -77,11 +85,12 @@ class AutomaticRecognitionTests(unittest.TestCase):
         engine=LocalRecognizer(backend=FakeBackend(result(text,confidence)))
         return engine.recognize_automatic(Recording(pcm(1,3000),16000))
 
-    def test_aubar_is_required_and_unknown_or_negated_speech_stays_inactive(self):
-        for phrase in ('contento','kirby contento','hoy hace frio',
+    def test_direct_commands_work_and_queries_or_negations_are_not_usb_commands(self):
+        for phrase in ('hoy hace frio',
                        'aubar no te pongas contento','aubar contento y celebrar'):
             self.assertIsNone(self.recognize(phrase).action,phrase)
-        for phrase,argument in (('aubar contento','contento'),('aubar celebrar','celebrate'),
+        for phrase,argument in (('contento','contento'),('celebrar','celebrate'),
+                                ('enojado derecha','enojado'),('aubar contento','contento'),('aubar celebrar','celebrate'),
                                 ('aubar mira a la izquierda','izquierda')):
             self.assertEqual(self.recognize(phrase).action.argument,argument)
         self.assertIsNone(self.recognize('aubar contento',.4).action)

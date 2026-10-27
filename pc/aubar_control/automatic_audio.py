@@ -10,7 +10,7 @@ from .audio import AudioError, MicrophoneCapture, Recording
 
 class SpeechSegmenter:
     FRAME_MS = 20
-    PRE_ROLL = 15
+    PRE_ROLL = 25
     START_FRAMES = 3
     END_FRAMES = 40
     MIN_VOICE_FRAMES = 9
@@ -112,10 +112,17 @@ class AutomaticCapture(MicrophoneCapture):
     def pause(self):
         self.listening.clear()
         with self.lock:
+            if self.detector is not None and self.detector.calibration_left:
+                self.needs_calibration=True
             self.detector = None
             self.speaking = False
             self.level = 0
             self.calibrating = False
+            while True:
+                try:
+                    self.utterances.get_nowait()
+                except Empty:
+                    break
 
     def cancel(self):
         super().cancel()

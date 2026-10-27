@@ -76,10 +76,11 @@ class CombinationTests(unittest.TestCase):
             self.assertTrue(session.connected)
             session.close()
 
-    def test_automatic_recognition_requires_aubar_for_the_whole_combination(self):
+    def test_automatic_recognition_accepts_direct_combinations_with_optional_name(self):
         recording=Recording(array('h',[2000]*16000).tobytes(),16000)
         for text,expected in (('aubar enojado derecha','derecha'),('aubar celebrar izquierda','izquierda'),
-                              ('enojado derecha',None),('aubar enojado derecha izquierda',None)):
+                              ('enojado derecha','derecha'),('celebrar izquierda','izquierda'),
+                              ('aubar enojado derecha izquierda',None)):
             engine=LocalRecognizer(backend=FakeBackend(result(text)))
             action=engine.recognize_automatic(recording).action
             self.assertEqual(action.look if action else None,expected)
