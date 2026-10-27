@@ -100,7 +100,7 @@ class ConfirmedResponseTests(unittest.TestCase):
         self.connect()
         action=match_command('contento')
         old_token=self.app.connection_token-1
-        self.app.events.put(('voice',(old_token,action,self.session.state),None))
+        self.app.events.put(('voice',(old_token,action,self.session.state,self.app.replies.generation),None))
         self.pump(lambda:self.app.events.empty())
         self.assertEqual(self.app.speech.calls,[])
         self.app.audio_phase='recognizing'

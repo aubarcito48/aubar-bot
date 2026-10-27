@@ -49,8 +49,8 @@ Abrir la pestaña **Voz**. Esta prueba funciona sin conectar el ESP32.
 3. Usar el texto predeterminado o escribir otro en **Texto para probar**.
 4. Pulsar **Probar voz**. El estado muestra **Hablando…** y al terminar informa
    la voz utilizada.
-5. Pulsar **Detener** para cortar la reproducción actual. Se puede iniciar
-   otra prueba sin reiniciar el panel.
+5. Pulsar **Detener** para cortar la reproducción actual y descartar cualquier
+   respuesta pendiente. Se puede iniciar otra prueba sin reiniciar el panel.
 
 Desmarcar **Activar voz** detiene el audio en curso y bloquea nuevos pedidos
 desde el panel. Al volver a marcarlo no se repite la frase anterior.
@@ -88,11 +88,36 @@ respuestas. Si falta la confirmación USB, no se anuncia la acción como realiza
 Si falla la voz después de confirmar una acción, el avatar conserva la acción
 y el panel informa el error sin volver a enviar la orden.
 
-Durante una respuesta se deshabilitan nuevas selecciones del catálogo; se puede
-detener o desactivar la voz y siguen disponibles las consultas USB. Solo se
-conserva una respuesta todavía no iniciada: una confirmación más reciente la
-reemplaza. Desactivar la voz o desconectar descarta las respuestas pendientes;
-volver a activar o reconectar no reproduce una respuesta antigua.
+## Reproducción e interrupciones
+
+El panel reproduce **una sola frase a la vez**. Mientras habla, se pueden
+seleccionar nuevas acciones desde **Catálogo**: el avatar las aplica al recibir
+la orden y el panel conserva únicamente la respuesta confirmada más reciente.
+Al terminar la frase actual, reproduce esa última respuesta; no anuncia todas
+las acciones intermedias. La espera máxima es de **15 segundos** desde la
+confirmación: una respuesta que supera ese plazo se descarta.
+
+- **Detener** corta el audio y descarta la respuesta pendiente.
+- Desactivar **Activar voz** hace lo mismo y bloquea nuevas reproducciones.
+  Volver a activarlo no repite ninguna frase anterior.
+- Desconectar el ESP32 descarta lo pendiente y detiene una respuesta del
+  dispositivo que estuviera sonando. Una prueba de texto independiente puede
+  continuar. Reconectar no reproduce respuestas antiguas.
+- Cerrar el panel cancela el audio y descarta lo pendiente; no se guarda una
+  cola entre sesiones.
+- Un error de reproducción descarta lo pendiente y se informa en **Voz**, sin
+  reintentar automáticamente. Se puede iniciar una nueva prueba o acción.
+
+Detener o silenciar también invalida las respuestas de órdenes enviadas o
+frases reconocidas anteriormente cuya confirmación todavía no llegó. Esto
+evita que un resultado tardío vuelva a crear audio cancelado, incluso si se
+reactiva la voz antes de recibirlo. Las acciones ya enviadas al avatar siguen
+su curso; estos controles interrumpen su respuesta hablada.
+
+**Probar voz** no acumula pedidos: se habilita cuando no hay una reproducción
+ni respuesta pendiente. El ayudante de voz se termina y libera en su trabajador
+al finalizar, cancelar o fallar; la interfaz sigue atendiendo eventos durante
+esa limpieza.
 
 ## Coordinación entre voz y micrófono
 
@@ -168,6 +193,11 @@ respuestas del catálogo, confirmación previa, silenciamiento, errores y pausa
 de escucha. `tests/pc/test_playback_gate.py` cubre la coordinación de pruebas
 y texto libre, descarte del audio propio, espera posterior, interrupciones,
 errores, apagado del micrófono, reconexión y recalibración.
+`tests/pc/test_reply_queue.py` verifica ráfagas de acciones, reemplazo por la
+última respuesta, vencimiento, confirmaciones tardías, interrupciones y
+recuperación sin repetir audio. Las pruebas del motor también simulan fallos
+de comunicación y comprueban que el proceso de voz se termine antes de permitir
+otra reproducción.
 La comprobación audible se realiza por separado.
 
 Referencia del tratamiento de texto:

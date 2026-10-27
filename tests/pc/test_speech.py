@@ -130,6 +130,55 @@ class FakeProcess:
 
 @unittest.skipUnless(os.name=='nt','Windows SAPI subprocess adapter')
 class SapiBackendTests(unittest.TestCase):
+    def test_pipe_failure_reaps_helper_and_next_request_can_succeed(self):
+        class PipeFailure(FakeProcess):
+            def __init__(self):
+                super().__init__(returncode=None)
+                self.terminated=False
+                self.waited=False
+            def communicate(self,input=None,timeout=None):
+                raise OSError('broken speech pipe')
+            def terminate(self):
+                self.terminated=True
+                self.returncode=-1
+            def wait(self,timeout=None):
+                self.waited=True
+                return self.returncode
+        failed=PipeFailure()
+        next_process=FakeProcess()
+        processes=iter((failed,next_process))
+        engine=SpeechEngine(SapiBackend(lambda *args,**kwargs:next(processes)))
+        try:
+            with self.assertRaises(SpeechError):
+                engine.speak('Primera').result(1)
+            self.assertTrue(failed.terminated)
+            self.assertTrue(failed.waited)
+            self.assertEqual(engine.speak('Nueva').result(1).language,'es-MX')
+        finally:
+            engine.close()
+
+    def test_failed_helper_that_does_not_terminate_is_killed_in_worker(self):
+        class StuckProcess(FakeProcess):
+            def __init__(self):
+                super().__init__(returncode=None)
+            def communicate(self,input=None,timeout=None):
+                raise OSError('pipe failure')
+            def terminate(self):
+                pass
+            def wait(self,timeout=None):
+                if not self.killed:
+                    raise subprocess.TimeoutExpired('speech',timeout)
+                return self.returncode
+        process=StuckProcess()
+        engine=SpeechEngine(SapiBackend(lambda *args,**kwargs:process))
+        try:
+            with self.assertRaises(SpeechError):
+                engine.speak('Prueba').result(1)
+            self.assertTrue(process.killed)
+            self.assertEqual(process.returncode,-9)
+        finally:
+            engine.close()
+
     def test_stop_terminates_only_the_current_request_and_can_speak_again(self):
         first=FakeProcess(gate=threading.Event())
         second=FakeProcess()

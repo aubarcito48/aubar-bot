@@ -36,10 +36,13 @@ class SapiBackend:
             raise SpeechError('La voz local de esta versión requiere Windows con SAPI.')
         helper = Path(__file__).with_name('sapi_speech.ps1')
         executable = Path(os.environ.get('SystemRoot', r'C:\Windows'))/'System32/WindowsPowerShell/v1.0/powershell.exe'
+        process=None
         try:
             with self._lock:
                 if self._closed:
                     raise SpeechError('El motor de voz está cerrado.')
+                if self._process is not None and self._process.poll() is None:
+                    raise SpeechError('El proceso de voz anterior todavía no se cerró. Detenelo antes de volver a probar.')
                 if cancel_event is not None and cancel_event.is_set():
                     raise SpeechCancelled('Reproducción detenida.')
                 process = self._factory(
@@ -79,9 +82,42 @@ class SapiBackend:
         except OSError as exc:
             raise SpeechError('No se pudo iniciar la voz local de Windows.') from exc
         finally:
+            # A failed pipe read must not leave a helper (and its audio) alive.
+            # Cleanup runs in the speech worker, never in the Tk event loop.
+            if process is not None:
+                try:
+                    self._reap(process)
+                except (OSError,subprocess.TimeoutExpired) as exc:
+                    raise SpeechError('No se pudo cerrar el proceso de voz anterior. Cerrá el panel antes de volver a probar.') from exc
             with self._lock:
-                self._process = None
-                self._active_cancel = None
+                if self._process is process:
+                    self._process = None
+                    self._active_cancel = None
+
+    @staticmethod
+    def _reap(process):
+        try:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=1)
+        except OSError:
+            try:
+                process.kill()
+                process.wait(timeout=1)
+            except OSError:
+                pass
+        finally:
+            for name in ('stdin','stdout','stderr'):
+                stream=getattr(process,name,None)
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
 
     def voices(self, *, cancel_event=None):
         response = self._request({'action':'voices'}, cancel_event=cancel_event)

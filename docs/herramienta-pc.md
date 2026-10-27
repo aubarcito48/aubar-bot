@@ -254,8 +254,11 @@ Todas las reproducciones del panel pausan la detección mientras suena Aubar,
 descartan el audio de ese intervalo y esperan 350 ms antes de recuperar la
 escucha, siempre que siga activada. Si se apaga el micrófono durante la voz,
 queda apagado; una desconexión o cierre tampoco lo reactiva.
-La [guía de voz local](voz-local.md) explica los controles, las respuestas y la
-API de texto independiente que podrá utilizar una futura IA.
+La voz reproduce una frase a la vez y conserva únicamente la última respuesta
+pendiente, por hasta 15 segundos. **Detener**, silenciar o desconectar descarta
+lo pendiente; volver a activar o reconectar no repite frases anteriores.
+La [guía de voz local](voz-local.md) explica las interrupciones, los controles,
+las respuestas y la API de texto independiente que podrá utilizar una futura IA.
 
 ## Modelo local
 
