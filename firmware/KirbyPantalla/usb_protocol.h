@@ -15,6 +15,7 @@ struct UsbCommand {
   UsbLook look = UsbLook::Center;
   UsbMode mode = UsbMode::Auto;
   AvatarAnimationId animation = AvatarAnimationId::None;
+  bool hasLook = false;
 };
 
 class UsbProtocol {
@@ -49,6 +50,18 @@ class UsbProtocol {
     char* argument = strchr(buffer_, ' ');
     if (argument) *argument++ = '\0';
     UsbCommand parsed;
+    // An optional final gaze is part of the same atomic expression/animation.
+    if (strcmp(buffer_,"EXPRESSION")==0 || strcmp(buffer_,"ANIMATION")==0) {
+      char* gaze = argument ? strchr(argument,' ') : nullptr;
+      if (gaze) {
+        *gaze++ = '\0';
+        parsed.hasLook = true;
+        if (strcmp(gaze,"izquierda")==0) parsed.look=UsbLook::Left;
+        else if (strcmp(gaze,"centro")==0) parsed.look=UsbLook::Center;
+        else if (strcmp(gaze,"derecha")==0) parsed.look=UsbLook::Right;
+        else return UsbParseResult::InvalidArgument;
+      }
+    }
     if (strcmp(buffer_, "PING") == 0) {
       if (argument) return UsbParseResult::InvalidArgument;
       parsed.type = UsbCommandType::Ping;

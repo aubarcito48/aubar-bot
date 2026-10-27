@@ -104,6 +104,13 @@ class AutomaticRecognitionTests(unittest.TestCase):
         engine=LocalRecognizer(backend=backend)
         audio=Recording(pcm(1.5,3000),16000)
         self.assertEqual(engine.recognize_automatic(audio).action.argument,'contento')
+        backend.wake['result'] += [
+            dict(word='[unk]',conf=.9,start=.6,end=.63),
+            dict(word='[unk]',conf=.9,start=.63,end=.66)]
+        self.assertEqual(engine.recognize_automatic(audio).action.argument,'contento')
+        backend.wake['result'][-1]['end']=.8
+        self.assertIsNone(engine.recognize_automatic(audio).action)
+        backend.wake['result']=backend.wake['result'][:2]
         backend.wake['result'][1]['conf']=.5
         self.assertIsNone(engine.recognize_automatic(audio).action)
         backend.wake['result'][1]['conf']=.99

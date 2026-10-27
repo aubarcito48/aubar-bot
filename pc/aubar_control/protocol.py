@@ -23,7 +23,11 @@ def encode_action(action) -> bytes:
     }
     if action.command not in allowed or action.argument not in allowed[action.command]:
         raise DeviceError('La acción reconocida no es un comando válido.')
-    return f'{action.command} {action.argument}\n'.encode('ascii')
+    look = getattr(action,'look',None)
+    if look is not None and (action.command not in ('EXPRESSION','ANIMATION') or look not in allowed['LOOK']):
+        raise DeviceError('La mirada combinada no es válida.')
+    suffix = ' '+look if look is not None else ''
+    return f'{action.command} {action.argument}{suffix}\n'.encode('ascii')
 
 
 def parse_status(line: str) -> DeviceStatus:

@@ -12,8 +12,13 @@ class AvatarController {
   constexpr uint32_t poseVersion() const { return poseVersion_; }
   constexpr uint32_t transitionMs() const { return transitionMs_; }
   constexpr float openness() const { return openness_; }
+  constexpr AvatarExpression pose() const {
+    AvatarExpression result=avatar_.expression();
+    if(lookOverride_) result.headY=manualGaze_<0?-18:manualGaze_>0?18:0;
+    return result;
+  }
   constexpr float gazeOffset() const {
-    if (!avatar_.expression().blinks || player_.active()) return 0;
+    if ((!avatar_.expression().blinks || player_.active()) && !lookOverride_) return 0;
     return mode_ == UsbMode::Auto ? gaze_.offset() : manualGaze_;
   }
   constexpr UsbLook look() const {
@@ -53,16 +58,22 @@ class AvatarController {
         enterManual(); avatar_.selectExpression(command.expression,now);
         transitionMs_=450; ++poseVersion_; break;
       case UsbCommandType::Look:
-        enterManual();
-        manualGaze_=command.look==UsbLook::Left?-24:command.look==UsbLook::Right?24:0; break;
+        // A direction changes the gaze without cancelling a running sequence.
+        mode_=UsbMode::Manual;
+        manualGaze_=command.look==UsbLook::Left?-24:command.look==UsbLook::Right?24:0;
+        lookOverride_=true; transitionMs_=450; ++poseVersion_; break;
       case UsbCommandType::Mode:
         if(command.mode==UsbMode::Manual) enterManual();
         else {
           mode_=UsbMode::Auto; player_.stop(); introAt_=now;
           avatar_.selectExpression(AvatarExpressionId::Neutral,now);
-          manualGaze_=0; gaze_.reset(now); transitionMs_=450; ++poseVersion_;
+          manualGaze_=0; lookOverride_=false; gaze_.reset(now); transitionMs_=450; ++poseVersion_;
         }
         break;
+    }
+    if (command.hasLook && (command.type==UsbCommandType::Expression || command.type==UsbCommandType::Animation)) {
+      manualGaze_=command.look==UsbLook::Left?-24:command.look==UsbLook::Right?24:0;
+      lookOverride_=true;
     }
     if (!player_.active()) openness_=avatar_.openness();
   }
@@ -83,5 +94,6 @@ class AvatarController {
   AnimationPlayer player_;
   UsbMode mode_=UsbMode::Auto;
   float manualGaze_=0,openness_=1;
+  bool lookOverride_=false;
   uint32_t introAt_=0,poseVersion_=0,transitionMs_=450;
 };

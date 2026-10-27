@@ -30,8 +30,18 @@ class UsbControl {
   template <typename Port>
   void flush(Port& port) {
     const int space = port.availableForWrite();
+    if(space>txCapacity_) txCapacity_=space;
     if (space <= 0 || sent_ >= responseLength_) return;
-    const size_t remaining = responseLength_ - sent_;
+    // HWCDC can leave a final full 64-byte USB packet pending at a ring-buffer
+    // boundary. Queue LF separately after the payload drains: its short packet
+    // completes the host transfer. Never block or call HWCDC::flush(timeout=0).
+    const size_t payloadLength=responseLength_-1;
+    if(sent_==payloadLength) {
+      if(space>=txCapacity_)
+        sent_+=port.write(reinterpret_cast<const uint8_t*>(response_+sent_),1);
+      return;
+    }
+    const size_t remaining = payloadLength - sent_;
     const size_t count = remaining < static_cast<size_t>(space) ? remaining : space;
     sent_ += port.write(reinterpret_cast<const uint8_t*>(response_+sent_), count);
   }
@@ -51,7 +61,7 @@ class UsbControl {
       const auto& cmd = command();
       switch (cmd.type) {
         case UsbCommandType::Ping:
-          snprintf(response_, sizeof(response_), "OK PONG 3\n"); break;
+          snprintf(response_, sizeof(response_), "OK PONG 4\n"); break;
         case UsbCommandType::Status:
           snprintf(response_, sizeof(response_), "OK STATUS mode=%s expression=%s look=%s animation=%s\n",
                    controller.mode() == UsbMode::Manual ? "manual" : "auto",
@@ -61,11 +71,13 @@ class UsbControl {
                    controller.animation()==AvatarAnimationId::None ? "none" :
                    avatarAnimation(controller.animation()).name); break;
         case UsbCommandType::Animation:
-          snprintf(response_, sizeof(response_), "OK APPLIED ANIMATION %s\n",
-                   avatarAnimation(cmd.animation).name); break;
+          snprintf(response_, sizeof(response_), "OK APPLIED ANIMATION %s%s%s\n",
+                   avatarAnimation(cmd.animation).name,cmd.hasLook?" ":"",
+                   cmd.hasLook?lookName(cmd.look):""); break;
         case UsbCommandType::Expression:
-          snprintf(response_, sizeof(response_), "OK APPLIED EXPRESSION %s\n",
-                   avatarExpression(cmd.expression).name); break;
+          snprintf(response_, sizeof(response_), "OK APPLIED EXPRESSION %s%s%s\n",
+                   avatarExpression(cmd.expression).name,cmd.hasLook?" ":"",
+                   cmd.hasLook?lookName(cmd.look):""); break;
         case UsbCommandType::Look:
           snprintf(response_, sizeof(response_), "OK APPLIED LOOK %s\n",
                    cmd.look == UsbLook::Left ? "izquierda" : cmd.look == UsbLook::Right ? "derecha" : "centro"); break;
@@ -78,8 +90,13 @@ class UsbControl {
     sent_ = 0;
   }
 
+  static const char* lookName(UsbLook look) {
+    return look==UsbLook::Left?"izquierda":look==UsbLook::Right?"derecha":"centro";
+  }
+
   UsbProtocol protocol_;
   char response_[160] = {};
   size_t responseLength_ = 0;
   size_t sent_ = 0;
+  int txCapacity_ = 0;
 };

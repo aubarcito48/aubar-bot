@@ -20,12 +20,12 @@ try {
     $kirbyPort.Write("`nPING`n")
     $synchronized = $false
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
-        if ($kirbyPort.ReadLine().TrimEnd([char[]]"`r`n") -eq 'OK PONG 3') {
+        if ($kirbyPort.ReadLine().TrimEnd([char[]]"`r`n") -eq 'OK PONG 4') {
             $synchronized = $true
             break
         }
     }
-    if (-not $synchronized) { throw 'Could not synchronize protocol v3.' }
+    if (-not $synchronized) { throw 'Could not synchronize protocol v4.' }
 
     Send-KirbyControl 'MODE auto' 'OK APPLIED MODE auto'
     Send-KirbyControl 'STATUS' 'OK STATUS mode=auto expression=neutral look=centro animation=none'
@@ -44,7 +44,7 @@ try {
         Send-KirbyControl 'STATUS' "OK STATUS mode=manual expression=enojado look=$direction animation=none"
     }
     Send-KirbyControl 'EXPRESSION dormido' 'OK APPLIED EXPRESSION dormido'
-    Send-KirbyControl 'STATUS' 'OK STATUS mode=manual expression=dormido look=centro animation=none'
+    Send-KirbyControl 'STATUS' 'OK STATUS mode=manual expression=dormido look=izquierda animation=none'
     Send-KirbyControl 'EXPRESSION contento' 'OK APPLIED EXPRESSION contento'
     Send-KirbyControl 'STATUS' 'OK STATUS mode=manual expression=contento look=izquierda animation=none'
     Send-KirbyControl 'MODE manual' 'OK APPLIED MODE manual'

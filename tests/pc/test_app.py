@@ -44,6 +44,8 @@ class FakeSession:
             self.state = replace(self.state, mode='manual', animation=action.argument)
         else:
             self.state = DeviceStatus('auto', 'neutral', 'centro') if action.argument == 'auto' else replace(self.state, mode='manual')
+        if action.look is not None:
+            self.state = replace(self.state, look=action.look)
         return self.state
 
     def close(self):

@@ -66,10 +66,10 @@ constexpr bool playlistAndInterruptions() {
   }
   if(c.animation()!=AvatarAnimationId::Idle) return false;
   c.apply({UsbCommandType::Look,AvatarExpressionId::Neutral,UsbLook::Left},now);
-  if(c.animation()!=AvatarAnimationId::None||c.mode()!=UsbMode::Manual) return false;
+  if(c.animation()!=AvatarAnimationId::Idle||c.mode()!=UsbMode::Manual) return false;
   auto pose=c.avatar().expressionId();
   c.update(now+99999,false);
-  return c.avatar().expressionId()==pose;
+  return c.animation()==AvatarAnimationId::Idle && c.look()==UsbLook::Left;
 }
 constexpr bool blinkConfigAndManualFreeze() {
   for(uint8_t i=0;i<23;++i) {
@@ -89,9 +89,9 @@ constexpr bool blinkConfigAndManualFreeze() {
   animation.type=UsbCommandType::Animation;
   animation.animation=AvatarAnimationId::Happy;
   c.apply(animation,100);
-  if(c.look()!=UsbLook::Center) return false;
+  if(c.look()!=UsbLook::Right) return false;
   c.apply({UsbCommandType::Mode,AvatarExpressionId::Neutral,UsbLook::Center,UsbMode::Manual},200);
-  return c.look()==UsbLook::Center&&c.animation()==AvatarAnimationId::None;
+  return c.look()==UsbLook::Right&&c.animation()==AvatarAnimationId::None;
 }
 static_assert(playerTiming(),"Imported step timing / rollover failed");
 static_assert(playlistAndInterruptions(),"Playlist or manual interruption failed");

@@ -43,7 +43,7 @@ class AubarApp:
         self.recognizer = recognizer or LocalRecognizer()
         self.recognized_action = None
         self.recognition_text = tk.StringVar(value="Todavía no hay una frase reconocida.")
-        self.recognition_message = tk.StringVar(value="Probá: «contento», «dormite» o «mirá a la izquierda».")
+        self.recognition_message = tk.StringVar(value="Probá «enojado derecha» o «celebrar izquierda». En automática, empezá con «Aubar».")
         self.mic_value = tk.StringVar()
         self.audio_message = tk.StringVar(value="Buscando micrófonos…")
         self.connected = False
@@ -180,6 +180,7 @@ class AubarApp:
         self.catalog_buttons.append(demo)
         ttk.Label(panel, textvariable=self.catalog_message, wraplength=650).grid(row=9, column=0, columnspan=2, sticky="w")
         ttk.Label(panel, text="Voz: «pensar», «reír», «celebrar», «dormir»…\n"
+                  "También: «Aubar, enojado derecha» o «Aubar, celebrar izquierda».\n"
                   "Para una pose fija: «expresión tímido» o «expresión cejas enojadas».\n"
                   "BOOT adelanta la animación; en una expresión fija, pasa a la siguiente.",
                   style="Muted.TLabel", wraplength=650).grid(row=10, column=0, columnspan=2, sticky="w", pady=(20, 0))
@@ -404,7 +405,7 @@ class AubarApp:
         self.automatic_capture.arm()
         self.audio_phase = 'auto_starting'
         self.audio_message.set('Preparando escucha automática…')
-        self.recognition_message.set('Decí «Aubar, contento» o «Aubar, celebrar» cuando esté lista.')
+        self.recognition_message.set('Decí «Aubar, enojado derecha» o «Aubar, celebrar izquierda» cuando esté lista.')
         self._audio_controls()
         self._audio_submit('auto_start', lambda: (generation, self.automatic_capture.start(device.index)))
 

@@ -15,6 +15,10 @@ intervalos de parpadeo exportados. Una animación seleccionada se repite; el mod
 automático reproduce una vuelta de cada una. BOOT adelanta a la siguiente
 animación o, en modo manual con pose fija, a la siguiente expresión.
 
+Todas las opciones admiten mirada izquierda, centro o derecha con firmware
+v4: **153 combinaciones**. La mirada explícita se mantiene durante la secuencia.
+Los comandos y ejemplos están en [la guía del panel](herramienta-pc.md#comandos-combinados).
+
 ## Expresiones
 
 Se eligen en **Catálogo → Expresión fija**. Por voz: «expresión» seguido de la
@@ -98,6 +102,6 @@ Este sketch reemplaza temporalmente el programa normal: volver a cargar
 `firmware/KirbyPantalla` al terminar.
 
 Con el firmware normal se puede ejecutar
-`python tools/test_catalog_usb.py --port COM3` para comprobar las 51 opciones,
+`python tools/test_catalog_usb.py --port COM3` para comprobar las 51 opciones y 153 combinaciones,
 sus confirmaciones y la cancelación de animaciones mediante expresiones fijas.
 Cerrar el panel antes de estas pruebas para liberar el puerto.

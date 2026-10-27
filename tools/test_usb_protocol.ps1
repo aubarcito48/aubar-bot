@@ -21,14 +21,14 @@ try {
     $kirbyPort.Write("`nPING`n")
     $synchronized = $false
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
-        if ($kirbyPort.ReadLine().TrimEnd([char[]]"`r`n") -eq 'OK PONG 3') {
+        if ($kirbyPort.ReadLine().TrimEnd([char[]]"`r`n") -eq 'OK PONG 4') {
             $synchronized = $true
             break
         }
     }
     if (-not $synchronized) { throw 'Could not synchronize the USB protocol.' }
     $cases = @(
-        @('PING', 'OK PONG 3'),
+        @('PING', 'OK PONG 4'),
         @('EXPRESSION neutral', 'OK APPLIED EXPRESSION neutral'),
         @('EXPRESSION contento', 'OK APPLIED EXPRESSION contento'),
         @('EXPRESSION sorprendido', 'OK APPLIED EXPRESSION sorprendido'),
@@ -74,14 +74,14 @@ try {
     Assert-KirbyResponse 'ERR LINE_TOO_LONG'
     $kirbyPort.Write(('X' * 1000) + "PING`nPING`n")
     Assert-KirbyResponse 'ERR LINE_TOO_LONG'
-    Assert-KirbyResponse 'OK PONG 3'
+    Assert-KirbyResponse 'OK PONG 4'
 
     # Check recovery repeatedly while the production animation loop runs.
     for ($index = 0; $index -lt 20; $index++) {
         $kirbyPort.Write("LOOK arriba`n")
         Assert-KirbyResponse 'ERR INVALID_ARGUMENT'
         $kirbyPort.Write("PING`n")
-        Assert-KirbyResponse 'OK PONG 3'
+        Assert-KirbyResponse 'OK PONG 4'
     }
     Write-Output "TK15 USB PASS: $kirbyChecks checks on $Port."
 }

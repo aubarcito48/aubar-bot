@@ -8,6 +8,7 @@ class VoiceAction:
     command: str
     argument: str
     label: str
+    look: str | None = None
 
 
 def normalize(text: str) -> str:
@@ -47,9 +48,11 @@ def match_command(text: str) -> VoiceAction | None:
         for form in (f'modo {word}', f'activa modo {word}', f'activa el modo {word}'):
             actions[form] = action
     # Explicit catalog prefixes disambiguate a static face from a sequence.
+    expression_labels = {}
     for identifier, label in EXPRESSIONS.items():
-        actions['expresion '+normalize(label)] = VoiceAction(
-            'EXPRESSION', identifier, f'Expresión: {label}')
+        action = VoiceAction('EXPRESSION', identifier, f'Expresión: {label}')
+        actions['expresion '+normalize(label)] = action
+        expression_labels[normalize(label)] = action
     aliases = {
         'sleeping': ('dormir',), 'waking': ('despertar',),
         'idle': ('reposo',), 'listening': ('escuchar',),
@@ -68,4 +71,18 @@ def match_command(text: str) -> VoiceAction | None:
         for word in words:
             actions[word] = action
             actions['animacion '+word] = action
-    return actions.get(phrase)
+    if phrase in actions:
+        return actions[phrase]
+    for direction in ('izquierda','centro','derecha'):
+        location = 'al centro' if direction=='centro' else 'a la '+direction
+        suffixes = (direction, location, 'mirando '+location,
+                    'y '+direction, 'y mira '+location, 'y mirando '+location)
+        for suffix in sorted(suffixes,key=len,reverse=True):
+            if not phrase.endswith(' '+suffix):
+                continue
+            name = phrase[:-len(suffix)-1]
+            base = actions.get(name) or expression_labels.get(name)
+            if base is not None and base.command in ('EXPRESSION','ANIMATION'):
+                return VoiceAction(base.command,base.argument,
+                                   base.label+' · Mirada: '+direction,direction)
+    return expression_labels.get(phrase)

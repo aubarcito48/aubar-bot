@@ -2,7 +2,8 @@
 
 Aplicación de escritorio para seleccionar el puerto USB, conectar la placa y
 consultar su expresión, modo, mirada y animación. El catálogo completo requiere
-firmware con protocolo **v3**; las funciones anteriores también aceptan v2.
+firmware con protocolo **v3**; los comandos combinados necesitan **v4**.
+Las funciones anteriores también aceptan v2.
 La conexión y las consultas no cambian el modo del avatar.
 La pestaña Micrófono permite capturar audio local sin necesitar conectar la placa.
 
@@ -198,6 +199,40 @@ no modifica ni reemplaza el modelo descargado.
 El ruido, las voces de fondo o una pronunciación parecida pueden producir
 errores: la palabra de activación reduce las activaciones involuntarias sin
 eliminarlas por completo. Revisar lo transcrito y la acción confirmada.
+
+## Comandos combinados
+
+Se puede añadir **izquierda**, **centro** o **derecha** a cualquier expresión
+o animación:
+
+- «Aubar, enojado derecha».
+- «Aubar, contento izquierda».
+- «Aubar, celebrar izquierda».
+- «Aubar, pensar centro».
+- «Aubar, dormir derecha».
+
+También se aceptan «enojado mirando a la derecha», «celebrar y izquierda» y
+«celebrar a la izquierda». En manual no hace falta decir el nombre; la escucha
+automática siempre exige «Aubar».
+
+Las 28 expresiones y 23 animaciones admiten las tres direcciones: **153
+combinaciones**. Para una expresión con un nombre que ya incluye una dirección,
+usar «expresión» y «mirando» para distinguir el nombre de la mirada solicitada.
+Por ejemplo, «Aubar, expresión enojado izquierda mirando a la derecha» elige
+la pose del catálogo *Enojado izquierda* y la orienta a la derecha.
+«Aubar, enojado izquierda» elige la expresión básica enojado y mirada izquierda.
+
+La combinación se aplica en **una sola orden USB** y se confirma completa;
+no se envían dos órdenes independientes. Si falla la confirmación, no se repite.
+Los firmwares anteriores a v4 rechazan la combinación desde el panel sin enviar
+una parte de ella.
+
+Las órdenes aisladas siguen disponibles: «Aubar, derecha», «Aubar, enojado»,
+«Aubar, celebrar». Una mirada aislada cambia la orientación y conserva la
+animación que esté reproduciéndose. La dirección explícita se mantiene al
+cambiar de paso, de animación o de expresión; **«Aubar, centro»** la centra y
+**«Aubar, modo automático»** restaura las orientaciones originales del catálogo.
+Las poses dormidas conservan los ojos cerrados y también pueden orientarse.
 
 ## Modelo local
 

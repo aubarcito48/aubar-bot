@@ -22,11 +22,11 @@ constexpr bool manualSelectionSurvivesDemoTimers() {
          controller.avatar().expressionId() == AvatarExpressionId::Angry;
 }
 
-constexpr bool sleepingCentersWithoutLosingSelection() {
+constexpr bool sleepingRetainsExplicitGaze() {
   AvatarController controller;
   controller.apply(look(UsbLook::Right), 0);
   controller.apply(expression(AvatarExpressionId::Sleeping), 1);
-  if (controller.look() != UsbLook::Center || controller.avatar().openness() != 1) return false;
+  if (controller.look() != UsbLook::Right || controller.avatar().openness() != 1) return false;
   controller.update(100000, false);
   if (controller.avatar().expressionId() != AvatarExpressionId::Sleeping) return false;
   controller.apply(expression(AvatarExpressionId::Happy), 100001);
@@ -70,7 +70,7 @@ constexpr bool usbWinsAndRepeatedCommandsKeepBlinking() {
 }
 
 static_assert(manualSelectionSurvivesDemoTimers(), "Demo overwrote manual selection");
-static_assert(sleepingCentersWithoutLosingSelection(), "Sleeping gaze rules failed");
+static_assert(sleepingRetainsExplicitGaze(), "Sleeping gaze rules failed");
 static_assert(manualModeFreezesCurrentTargetsAndPingDoesNotResetBlink(), "Query changed animation");
 static_assert(autoRestartsAndButtonKeepsItsMode(), "BOOT or mode restart failed");
 static_assert(usbWinsAndRepeatedCommandsKeepBlinking(), "Command priority or repeated expression failed");

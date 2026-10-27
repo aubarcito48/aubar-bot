@@ -34,7 +34,7 @@ class FakeSerial:
                 raise serial.SerialException("cable disconnected")
             self.response.extend(b"OK STATUS mode=manual expression=enojado look=izquierda\n"
                                  if not self.bad_status else b"OK STATUS mode=unknown\n")
-        elif data.startswith((b'EXPRESSION ', b'LOOK ', b'MODE ')):
+        elif data.startswith((b'EXPRESSION ', b'LOOK ', b'MODE ', b'ANIMATION ')):
             if self.unplug:
                 raise serial.SerialException('unplugged')
             if not self.drop_ack:

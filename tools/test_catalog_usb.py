@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 import sys
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pc.aubar_control.catalog import EXPRESSIONS, ANIMATIONS
@@ -26,10 +27,27 @@ def main():
             status=session.apply_action(action)
             assert status.mode=='manual' and status.animation==identifier,status
             checks+=1
+        combinations=0
+        for command,catalog in (('EXPRESSION',EXPRESSIONS),('ANIMATION',ANIMATIONS)):
+            for identifier in catalog:
+                for direction in ('izquierda','centro','derecha'):
+                    status=session.apply_action(VoiceAction(command,identifier,'',direction))
+                    assert status.mode=='manual' and status.look==direction,status
+                    if command=='ANIMATION':
+                        assert status.animation==identifier,status
+                    else:
+                        assert status.expression==identifier and status.animation=='none',status
+                    combinations+=1
+        session.apply_action(match_command('celebrar izquierda'))
+        time.sleep(3.1)
+        status=session.status()
+        assert status.animation=='celebrate' and status.look=='izquierda',status
+        status=session.apply_action(match_command('derecha'))
+        assert status.animation=='celebrate' and status.look=='derecha',status
         status=session.apply_action(VoiceAction('EXPRESSION','contento',''))
         assert status.animation=='none' and status.expression=='contento',status
         session.apply_action(VoiceAction('MODE','auto',''))
-        print(f'USB catalog PASS: {checks} options confirmed; manual interruption PASS; automatic mode restored.')
+        print(f'USB catalog PASS: {checks} isolated options; {combinations} atomic combinations; animation gaze persistence PASS; automatic mode restored.')
     finally:
         session.close()
 

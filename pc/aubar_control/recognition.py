@@ -105,7 +105,7 @@ class LocalRecognizer:
         result = json.loads(decoder.FinalResult())
         words = result.get('result',[])
         names = [word.get('word') for word in words]
-        if names not in (['au','bar'],['au','bar','[unk]']):
+        if names[:2]!=['au','bar'] or any(name!='[unk]' for name in names[2:]):
             return False
         au, bar = words[:2]
         if min(float(au.get('conf',0)),float(bar.get('conf',0)))<.75:
@@ -115,4 +115,10 @@ class LocalRecognizer:
             return False
         if float(bar.get('start',0))-float(au.get('end',0))>.15:
             return False
-        return len(words)==2 or float(words[2].get('end',0))-float(words[2].get('start',0))<=.10
+        # Boundary frames can be emitted as one or several unknown pieces.
+        # Admit at most 100 ms total, right at the start of the command.
+        tail=words[2:]
+        return not tail or (
+            sum(float(word.get('end',0))-float(word.get('start',0)) for word in tail)<=.10
+            and float(tail[0].get('start',0))>=end-.02
+            and float(tail[-1].get('end',0))<=command_start+.06)

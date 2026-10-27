@@ -93,7 +93,7 @@ void testTransportBackpressureAndBudget() {
     if (usb.poll(port, controller, 0)) ++commands;
   }
   check(commands == 2);
-  check(strcmp(port.output, "OK APPLIED EXPRESSION enojado\nOK PONG 3\n") == 0);
+  check(strcmp(port.output, "OK APPLIED EXPRESSION enojado\nOK PONG 4\n") == 0);
 
   UsbControl flooded;
   FakePort floodPort;
@@ -109,9 +109,27 @@ void testTransportBackpressureAndBudget() {
   floodPort.inputBytes(recovery, strlen(recovery));
   floodPort.room = 200;
   check(!flooded.poll(floodPort, controller, 0));
+  floodPort.room = 200;
   check(flooded.poll(floodPort, controller, 0));
-  check(strcmp(floodPort.output, "ERR LINE_TOO_LONG\nOK PONG 3\n") == 0);
+  floodPort.room = 200;
+  check(!flooded.poll(floodPort, controller, 0));
+  check(strcmp(floodPort.output, "ERR LINE_TOO_LONG\nOK PONG 4\n") == 0);
   check(controller.avatar().expressionId() == AvatarExpressionId::Angry);
+}
+
+void testLineEndWaitsForPayloadDrain() {
+  UsbControl usb;
+  AvatarController controller;
+  FakePort port;
+  port.room=128;
+  port.inputBytes("PING\n",5);
+  check(usb.poll(port,controller,0));
+  check(strcmp(port.output,"OK PONG 4")==0);
+  check(!usb.poll(port,controller,1));
+  check(strcmp(port.output,"OK PONG 4")==0);
+  port.room=128;  // Host consumed the pending payload.
+  check(!usb.poll(port,controller,2));
+  check(strcmp(port.output,"OK PONG 4\n")==0);
 }
 
 void setup() {
@@ -119,6 +137,7 @@ void setup() {
   testCommands();
   testInvalidLinesAndRecovery();
   testTransportBackpressureAndBudget();
+  testLineEndWaitsForPayloadDrain();
 }
 
 void loop() {

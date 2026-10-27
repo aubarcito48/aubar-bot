@@ -39,7 +39,7 @@ struct ProjectedEllipse {
 };
 
 struct ProjectedEye {
-  float cx,cy,ix,iy,jx,jy,hw,hh,r;
+  float cx,cy,ix,iy,jx,jy,hw,hh,r,extentX,extentY;
   ProjectedEye(const AvatarEye& e,float center,float openness,const AvatarProjection& p,float shake) {
     float x=center+e.x+shake,y=34+e.y;
     float z=sqrtf(fmaxf(0,120*120-x*x-y*y));
@@ -51,6 +51,12 @@ struct ProjectedEye {
     if(fabsf(det)<.01f) det=.01f;
     ix=vy/det; iy=-vx/det; jx=-uy/det; jy=ux/det;
     hw=e.width*.5f; hh=fmaxf(5,e.height*openness)*.5f; r=fminf(hw,hh);
+    extentX=fabsf(ux)*hw+fabsf(vx)*hh;
+    extentY=fabsf(uy)*hw+fabsf(vy)*hh;
+  }
+  bool fits() const {
+    float x=fabsf(cx)+extentX,y=fabsf(cy)+extentY;
+    return x*x+y*y<=118*118;
   }
   bool contains(float x,float y) const {
     x-=cx; y-=cy;
@@ -72,6 +78,13 @@ static void renderFaceFrame(uint16_t* pixels,const AvatarExpression& e,
   float gaze=avatarGazeOffset(e,requestedGaze);
   ProjectedEye left(e.left,-(e.spacing+e.left.width)*.5f+gaze,openness,p,shake);
   ProjectedEye right(e.right,(e.spacing+e.right.width)*.5f+gaze,openness,p,shake);
+  // A turn changes the projected eye margin. Reduce the extra gaze before
+  // rasterization instead of cutting a wide eye against the sphere edge.
+  for(uint8_t attempt=0;gaze!=0 && (!left.fits()||!right.fits()) && attempt<12;++attempt) {
+    gaze=attempt==11?0:gaze*.75f;
+    left=ProjectedEye(e.left,-(e.spacing+e.left.width)*.5f+gaze,openness,p,shake);
+    right=ProjectedEye(e.right,(e.spacing+e.right.width)*.5f+gaze,openness,p,shake);
+  }
   for(int y=0;y<FACE_HEIGHT;++y) {
     float my=(FACE_Y+y-160)/AVATAR_SCALE-dy;
     for(int x=0;x<FACE_WIDTH;++x) {

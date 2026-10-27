@@ -30,6 +30,7 @@ class DeviceSession:
         self._timeout = timeout
         self._serial = None
         self.port: str | None = None
+        self.version: int | None = None
 
     @property
     def connected(self) -> bool:
@@ -38,6 +39,7 @@ class DeviceSession:
     def close(self) -> None:
         connection, self._serial = self._serial, None
         self.port = None
+        self.version = None
         if connection is not None:
             try:
                 connection.close()
@@ -74,10 +76,11 @@ class DeviceSession:
             deadline = time.monotonic() + self._timeout
             while True:
                 reply = self._readline(deadline)
-                if reply in ("OK PONG 2", "OK PONG 3"):
+                if reply in ("OK PONG 2", "OK PONG 3", "OK PONG 4"):
+                    self.version = int(reply.rsplit(' ',1)[1])
                     break
                 if reply.startswith("OK PONG "):
-                    raise DeviceError("El firmware usa otra versión del protocolo; se necesita la versión 2 o 3.")
+                    raise DeviceError("El firmware usa otra versión del protocolo; se necesita la versión 2, 3 o 4.")
             self.port = port
             return self.status()
         except DeviceError:
@@ -105,11 +108,13 @@ class DeviceSession:
         message = encode_action(action)
         if not self.connected:
             raise DeviceError('Conectá el ESP32 y repetí la orden de voz.')
+        if getattr(action,'look',None) is not None and self.version!=4:
+            raise DeviceError('Los comandos combinados requieren firmware USB v4. Actualizá la placa.')
         acknowledged = False
         try:
             self._serial.write(message)
             reply = self._readline(time.monotonic() + self._timeout)
-            expected = f'OK APPLIED {action.command} {action.argument}'
+            expected = 'OK APPLIED '+message.decode('ascii').rstrip('\n')
             if reply != expected:
                 raise DeviceError('El ESP32 no confirmó la orden esperada.')
             acknowledged = True
