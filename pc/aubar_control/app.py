@@ -16,6 +16,7 @@ from .speech import SpeechEngine, SpeechError, SpeechCancelled
 from .responses import confirmation_text
 from .playback_gate import PlaybackGate
 from .reply_queue import ReplyQueue
+from .config import load_groq_config
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -26,8 +27,12 @@ PINK = "#ffc2e9"
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
                  capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None,
-                 reply_provider=confirmation_text):
+                 reply_provider=confirmation_text, config_loader=load_groq_config):
         self.root = root
+        self.config_loader=config_loader
+        self.groq_config=None
+        self.groq_config_message=tk.StringVar()
+        self.reload_groq_configuration()
         self.session = session or DeviceSession()
         self.port_provider = port_provider
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-usb")
@@ -138,6 +143,9 @@ class AubarApp:
         catalog_tab = ttk.Frame(notebook, padding=16)
         notebook.add(catalog_tab, text="Catálogo")
         self._build_catalog(catalog_tab)
+        ai_tab=ttk.Frame(notebook,padding=16)
+        notebook.add(ai_tab,text="IA")
+        self._build_ai_configuration(ai_tab)
         self._build_microphone(microphone_tab)
         main = device_tab
         main.columnconfigure(0, weight=1)
@@ -180,6 +188,29 @@ class AubarApp:
         self.activity.grid(row=7, column=0, sticky="nsew")
         ttk.Label(main, text="Cerrá el monitor serie de Arduino antes de conectar.", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=(12, 0))
         self._controls()
+
+    def reload_groq_configuration(self):
+        state=self.config_loader()
+        self.groq_config=state.config
+        self.groq_config_message.set(state.message)
+
+    def _build_ai_configuration(self,panel):
+        panel.columnconfigure(0,weight=1)
+        ttk.Label(panel,text="La conversación de Aubar",style="Section.TLabel").grid(
+            row=0,column=0,sticky="w",pady=(0,12))
+        ttk.Label(panel,text="Configuración de Groq",style="Muted.TLabel").grid(
+            row=1,column=0,sticky="w",pady=(0,8))
+        self.groq_config_status=ttk.Label(panel,textvariable=self.groq_config_message,
+            wraplength=600)
+        self.groq_config_status.grid(row=2,column=0,sticky="ew",pady=(0,16))
+        ttk.Button(panel,text="Recargar configuración",command=self.reload_groq_configuration).grid(
+            row=3,column=0,sticky="w",pady=(0,20))
+        ttk.Label(panel,text="Guardá tu clave en GROQ_API_KEY dentro del archivo .env del proyecto. "
+            "La clave no se muestra en el panel. Después de guardar, recargá la configuración.",
+            style="Muted.TLabel",wraplength=600).grid(row=4,column=0,sticky="ew",pady=(0,16))
+        ttk.Label(panel,text="Esta etapa prepara la configuración. La conversación con Groq se habilitará "
+            "en las próximas tareas; los controles del avatar y la voz siguen disponibles.",
+            style="Muted.TLabel",wraplength=600).grid(row=5,column=0,sticky="ew")
 
     def _build_speech(self, panel):
         panel.columnconfigure(0, weight=1)

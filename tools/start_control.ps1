@@ -21,7 +21,7 @@ if (-not (Test-Path -LiteralPath $kirbyPython)) {
 
 & $kirbyPython -c 'import sys; assert sys.version_info >= (3, 11); import tkinter'
 if ($LASTEXITCODE -ne 0) { throw 'Se necesita Python 3.11 o superior con tkinter.' }
-& $kirbyPython -c 'import serial, sounddevice, vosk, kokoro_onnx, sys; from importlib.metadata import version; assert serial.VERSION == str(3.5); assert version(sys.argv[1]) == sys.argv[2]' kokoro-onnx 0.4.7
+& $kirbyPython -c 'import serial, sounddevice, vosk, kokoro_onnx, dotenv, sys; from importlib.metadata import version; assert serial.VERSION == str(3.5); assert version(sys.argv[1]) == sys.argv[2]; assert version(sys.argv[3]) == sys.argv[4]' kokoro-onnx 0.4.7 python-dotenv 1.2.4
 if ($LASTEXITCODE -ne 0) {
     & $kirbyPython -m pip install -r (Join-Path $kirbyRoot 'pc\requirements.txt')
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias. Revisa la conexion a internet.' }

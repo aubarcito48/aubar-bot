@@ -2,3 +2,4 @@ pyserial==3.5
 sounddevice==0.5.5
 vosk==0.3.45
 kokoro-onnx==0.4.7
+python-dotenv==1.2.4

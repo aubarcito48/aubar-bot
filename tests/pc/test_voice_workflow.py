@@ -13,6 +13,7 @@ from pc.aubar_control.audio import InputDevice, MicrophoneCapture
 from pc.aubar_control.playback_gate import PlaybackGate
 from pc.aubar_control.recognition import LocalRecognizer
 from pc.aubar_control.session import DevicePort, DeviceSession
+from pc.aubar_control.config import load_groq_config
 
 
 class AvatarSerial(FakeSerial):
@@ -57,7 +58,8 @@ class VoiceWorkflowTests(unittest.TestCase):
             port_provider=lambda:[DevicePort('COM3','ESP32 simulado',True)],
             capture=MicrophoneCapture(self.audio),
             audio_provider=lambda:[InputDevice(1,'Entrada simulada','Prueba',True)],
-            recognizer=LocalRecognizer(backend=self.decoder),speech=self.voice)
+            recognizer=LocalRecognizer(backend=self.decoder),speech=self.voice,
+            config_loader=lambda:load_groq_config(None,environ={}))
         self.clock=Clock()
         self.app.playback_gate=PlaybackGate(self.clock)
         self.pump(lambda:not self.app.busy and not self.app.audio_scan_busy)
