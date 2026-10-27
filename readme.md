@@ -6,14 +6,62 @@ con parpadeo, miradas y control por voz desde el micrófono de la PC.
 
 El firmware funciona de forma autónoma después de cargarlo: basta con alimentar
 la placa por USB. Para controlarlo por voz se utiliza el panel de la PC;
-la conversación libre sigue siendo una funcionalidad pendiente.
+también permite conversar con Groq, escuchar las respuestas con la voz local
+Dora y abrir, buscar y reproducir videos de YouTube en el navegador.
+
+## Usar el panel de PC
+
+Con Python 3.11 o superior instalado y el firmware cargado, ejecutar desde
+PowerShell en la raíz del proyecto:
+
+```powershell
+.\tools\start_control.ps1
+```
+
+El lanzador prepara el entorno, las dependencias y los modelos de voz. La primera
+ejecución necesita internet para descargarlos; el modelo completo de español
+ocupa unos 1,4 GB. Esperar **Reconocimiento listo** antes de hablar: la carga
+inicial del modelo puede tardar unos 25 segundos.
+
+En **Dispositivo**, conectar el puerto del ESP32. En **Micrófono**, elegir la
+entrada y activar la escucha automática, o mantener pulsado el botón para hablar.
+Los dos modos aceptan comandos y preguntas **sin decir «Aubar»**. El nombre
+es opcional. **Probar micrófono** permite escuchar una muestra de la entrada
+sin ejecutar comandos.
+
+Para conversar, copiar `.env.example` a `.env` si todavía no existe ese archivo,
+completar `GROQ_API_KEY` y recargar la configuración en **IA**. La clave permanece
+en el archivo local, excluido de Git. Groq y YouTube necesitan internet; el
+reconocimiento, la voz Dora y los comandos del avatar funcionan localmente.
+
+## Conversación y YouTube
+
+Se puede decir **«contame algo interesante»** o **«cómo estás»** directamente.
+Las respuestas conservan el contexto de la conversación, se leen con Dora si
+**Activar voz** está marcado y acompañan al avatar con una expresión o animación.
+**Nueva conversación** borra el contexto; **Cancelar** interrumpe el turno pendiente.
+La escucha se pausa mientras Aubar responde y vuelve si la automática sigue activa.
+
+| Acción | Ejemplo de voz |
+| --- | --- |
+| Abrir YouTube | «abrí YouTube» |
+| Mostrar resultados de búsqueda | «buscá videos de gatos en YouTube» |
+| Buscar y abrir el primer video para reproducirlo | «poné videos de gatos en YouTube» |
+| Pedir la reproducción con otro verbo | «reproducí música relajante en YouTube» |
+| Abrir, buscar y reproducir con una sola frase | «abrí YouTube y buscá videos de gatos y reproducilo» |
+
+Las acciones de YouTube se ejecutan en el navegador predeterminado de la PC y
+no necesitan Groq. «Buscá» muestra los resultados; «poné» y «reproducí» abren el
+primer video con reproducción automática, sujeta a los controles del navegador
+y de YouTube.
 
 ## Comandos de voz aislados
 
-Para usar la voz, abrir el [panel de PC](docs/herramienta-pc.md), conectar el
+Para usar la voz, abrir el [panel de PC](#usar-el-panel-de-pc), conectar el
 ESP32 y seleccionar el micrófono. En **escucha automática**, activar la casilla,
-esperar la calibración y decir **«Aubar» + comando**. Una pausa de **0,8 segundos**
-termina la frase. En captura manual se puede omitir «Aubar».
+esperar la calibración y decir **el comando directamente**. Una pausa de
+**0,8 segundos** termina la frase. En captura manual, esperar **Escuchando**,
+hablar y soltar el botón para terminar. Ninguno de los modos exige «Aubar».
 
 Se ignoran mayúsculas, tildes y puntuación. El panel muestra lo reconocido y
 la confirmación del ESP32. Los siguientes comandos seleccionan una sola acción.
@@ -22,80 +70,81 @@ la confirmación del ESP32. Los siguientes comandos seleccionan una sola acción
 
 | Expresión | Comando de voz |
 | --- | --- |
-| Neutral | «Aubar, neutral» |
-| Contento | «Aubar, contento» |
-| Sorprendido | «Aubar, sorprendido» |
-| Dormido | «Aubar, dormido» |
-| Enojado | «Aubar, enojado» |
-| Mirada lateral arriba | «Aubar, expresión mirada lateral arriba» |
-| Mirada abajo | «Aubar, expresión mirada abajo» |
-| Escéptico derecha | «Aubar, expresión escéptico derecha» |
-| Atento pequeño | «Aubar, expresión atento pequeño» |
-| Mirada amplia abajo | «Aubar, expresión mirada amplia abajo» |
-| Sorpresa izquierda | «Aubar, expresión sorpresa izquierda» |
-| Somnoliento | «Aubar, expresión somnoliento» |
-| Curioso izquierda | «Aubar, expresión curioso izquierda» |
-| Asimétrico abajo derecha | «Aubar, expresión asimétrico abajo derecha» |
-| Atento izquierda | «Aubar, expresión atento izquierda» |
-| Alegre abajo derecha | «Aubar, expresión alegre abajo derecha» |
-| Escéptico izquierda | «Aubar, expresión escéptico izquierda» |
-| Mirada derecha | «Aubar, expresión mirada derecha» |
-| Enojado izquierda | «Aubar, expresión enojado izquierda» |
-| Juguetón derecha | «Aubar, expresión juguetón derecha» |
-| Asimétrico arriba izquierda | «Aubar, expresión asimétrico arriba izquierda» |
-| Mirada suave abajo | «Aubar, expresión mirada suave abajo» |
-| Mirada amplia abajo izquierda | «Aubar, expresión mirada amplia abajo izquierda» |
-| Adormilado | «Aubar, expresión adormilado» |
-| Sospechoso derecha | «Aubar, expresión sospechoso derecha» |
-| Tímido | «Aubar, expresión tímido» |
-| Cejas enojadas | «Aubar, expresión cejas enojadas» |
-| Inquieto izquierda | «Aubar, expresión inquieto izquierda» |
+| Neutral | «neutral» |
+| Contento | «contento» |
+| Sorprendido | «sorprendido» |
+| Dormido | «dormido» |
+| Enojado | «enojado» |
+| Mirada lateral arriba | «mirada lateral arriba» |
+| Mirada abajo | «mirada abajo» |
+| Escéptico derecha | «escéptico derecha» |
+| Atento pequeño | «atento pequeño» |
+| Mirada amplia abajo | «mirada amplia abajo» |
+| Sorpresa izquierda | «sorpresa izquierda» |
+| Somnoliento | «somnoliento» |
+| Curioso izquierda | «curioso izquierda» |
+| Asimétrico abajo derecha | «asimétrico abajo derecha» |
+| Atento izquierda | «atento izquierda» |
+| Alegre abajo derecha | «alegre abajo derecha» |
+| Escéptico izquierda | «escéptico izquierda» |
+| Mirada derecha | «mirada derecha» |
+| Enojado izquierda | «expresión enojado izquierda» |
+| Juguetón derecha | «juguetón derecha» |
+| Asimétrico arriba izquierda | «asimétrico arriba izquierda» |
+| Mirada suave abajo | «mirada suave abajo» |
+| Mirada amplia abajo izquierda | «expresión mirada amplia abajo izquierda» |
+| Adormilado | «adormilado» |
+| Sospechoso derecha | «sospechoso derecha» |
+| Tímido | «tímido» |
+| Cejas enojadas | «cejas enojadas» |
+| Inquieto izquierda | «inquieto izquierda» |
 
-También se aceptan **«Aubar, dormite»**, **«Aubar, duerme»** y **«Aubar, a dormir»**
-para la expresión dormida. Para contento, usar **«Aubar, contento»**.
-El prefijo «expresión» también se puede usar con las cinco expresiones básicas.
+También se aceptan **«dormite»**, **«duerme»** y **«a dormir»**
+para la expresión dormida. Para contento, usar **«contento»**.
+Los nombres se dicen directamente, como **«mirada lateral arriba»** o **«tímido»**.
+Solo las poses **Enojado izquierda** y **Mirada amplia abajo izquierda** llevan
+«expresión» para distinguirlas de un comando que combina otra expresión con mirada.
 
 ### Animaciones en bucle — 23
 
 | Animación | Comando de voz |
 | --- | --- |
-| Dormir | «Aubar, dormir» |
-| Despertar | «Aubar, despertar» |
-| Reposo | «Aubar, reposo» |
-| Escuchar | «Aubar, escuchar» |
-| Pensar | «Aubar, pensar» |
-| Buscar | «Aubar, buscar» |
-| Trabajar | «Aubar, trabajar» |
-| Entusiasmarse | «Aubar, entusiasmarse» |
-| Aburrirse | «Aubar, aburrirse» |
-| Sospechar | «Aubar, sospechar» |
-| Enojarse | «Aubar, enojarse» |
-| Adormecerse | «Aubar, adormecerse» |
-| Alegría | «Aubar, alegría» |
-| Curiosear | «Aubar, curiosear» |
-| Confundirse | «Aubar, confundirse» |
-| Sorprenderse | «Aubar, sorprenderse» |
-| Orgullo | «Aubar, orgullo» |
-| Timidez | «Aubar, timidez» |
-| Tristeza | «Aubar, tristeza» |
-| Reír | «Aubar, reír» |
-| Asustarse | «Aubar, asustarse» |
-| Jugar | «Aubar, jugar» |
-| Celebrar | «Aubar, celebrar» |
+| Dormir | «dormir» |
+| Despertar | «despertar» |
+| Reposo | «reposo» |
+| Escuchar | «escuchar» |
+| Pensar | «pensar» |
+| Buscar | «buscar» |
+| Trabajar | «trabajar» |
+| Entusiasmarse | «entusiasmarse» |
+| Aburrirse | «aburrirse» |
+| Sospechar | «sospechar» |
+| Enojarse | «enojarse» |
+| Adormecerse | «adormecerse» |
+| Alegría | «alegría» |
+| Curiosear | «curiosear» |
+| Confundirse | «confundirse» |
+| Sorprenderse | «sorprenderse» |
+| Orgullo | «orgullo» |
+| Timidez | «timidez» |
+| Tristeza | «tristeza» |
+| Reír | «reír» |
+| Asustarse | «asustarse» |
+| Jugar | «jugar» |
+| Celebrar | «celebrar» |
 
-También se acepta «animación» antes del nombre: **«Aubar, animación celebrar»**.
-**«Aubar, dormido»** elige una pose fija; **«Aubar, dormir»** reproduce la
+**«dormido»** elige una pose fija; **«dormir»** reproduce la
 animación de sueño.
 
 ### Miradas y modos
 
 | Acción | Comando de voz |
 | --- | --- |
-| Mirar a la izquierda | «Aubar, izquierda» o «Aubar, mirá a la izquierda» |
-| Mirar al centro | «Aubar, centro» o «Aubar, mirá al centro» |
-| Mirar a la derecha | «Aubar, derecha» o «Aubar, mirá a la derecha» |
-| Recorrer automáticamente todas las animaciones | «Aubar, modo automático» |
-| Detener la secuencia en la expresión actual | «Aubar, modo manual» |
+| Mirar a la izquierda | «izquierda» o «mirá a la izquierda» |
+| Mirar al centro | «centro» o «mirá al centro» |
+| Mirar a la derecha | «derecha» o «mirá a la derecha» |
+| Recorrer automáticamente todas las animaciones | «modo automático» |
+| Detener la secuencia en la expresión actual | «modo manual» |
 
 Una mirada aislada conserva la animación que se esté reproduciendo.
 El modo automático restaura las orientaciones originales del catálogo.
@@ -105,52 +154,52 @@ El modo automático restaura las orientaciones originales del catálogo.
 Combinar **una expresión o una animación** con **izquierda, centro o derecha**.
 Hay **153 combinaciones**: 28 expresiones × 3 miradas y 23 animaciones × 3 miradas.
 
-Ejemplos: **«Aubar, enojado derecha»**, **«Aubar, celebrar izquierda»** y
-**«Aubar, pensar centro»**. También se acepta **«Aubar, enojado mirando a la
-derecha»** o **«Aubar, celebrar y izquierda»**.
+Ejemplos: **«enojado derecha»**, **«celebrar izquierda»** y
+**«pensar centro»**. También se acepta **«enojado mirando a la
+derecha»** o **«celebrar y izquierda»**.
 
 La combinación se aplica en una sola orden y la mirada se mantiene durante
-los pasos de la animación y las selecciones siguientes. **«Aubar, centro»**
-la centra; **«Aubar, modo automático»** recupera las orientaciones originales.
+los pasos de la animación y las selecciones siguientes. **«centro»**
+la centra; **«modo automático»** recupera las orientaciones originales.
 Los ojos dormidos siguen cerrados y también pueden orientarse.
 
-Los combinados requieren el firmware con **protocolo USB v4**. Para los nombres
-de expresiones que ya incluyen una dirección se usa «expresión» y «mirando»,
-como en la lista, para distinguir el nombre de la pose de la mirada solicitada.
+Los combinados requieren el firmware con **protocolo USB v4**. Si el nombre de
+la expresión ya incluye una dirección, agregar **«mirando»** para indicar la
+orientación deseada: **«mirada derecha mirando a la izquierda»**.
 
 <details>
 <summary>Lista completa: expresiones con mirada — 84 combinaciones</summary>
 
 | Expresión | Comandos combinados |
 | --- | --- |
-| Neutral | «Aubar, neutral izquierda»<br>«Aubar, neutral centro»<br>«Aubar, neutral derecha» |
-| Contento | «Aubar, contento izquierda»<br>«Aubar, contento centro»<br>«Aubar, contento derecha» |
-| Sorprendido | «Aubar, sorprendido izquierda»<br>«Aubar, sorprendido centro»<br>«Aubar, sorprendido derecha» |
-| Dormido | «Aubar, dormido izquierda»<br>«Aubar, dormido centro»<br>«Aubar, dormido derecha» |
-| Enojado | «Aubar, enojado izquierda»<br>«Aubar, enojado centro»<br>«Aubar, enojado derecha» |
-| Mirada lateral arriba | «Aubar, expresión mirada lateral arriba mirando a la izquierda»<br>«Aubar, expresión mirada lateral arriba mirando al centro»<br>«Aubar, expresión mirada lateral arriba mirando a la derecha» |
-| Mirada abajo | «Aubar, expresión mirada abajo mirando a la izquierda»<br>«Aubar, expresión mirada abajo mirando al centro»<br>«Aubar, expresión mirada abajo mirando a la derecha» |
-| Escéptico derecha | «Aubar, expresión escéptico derecha mirando a la izquierda»<br>«Aubar, expresión escéptico derecha mirando al centro»<br>«Aubar, expresión escéptico derecha mirando a la derecha» |
-| Atento pequeño | «Aubar, expresión atento pequeño mirando a la izquierda»<br>«Aubar, expresión atento pequeño mirando al centro»<br>«Aubar, expresión atento pequeño mirando a la derecha» |
-| Mirada amplia abajo | «Aubar, expresión mirada amplia abajo mirando a la izquierda»<br>«Aubar, expresión mirada amplia abajo mirando al centro»<br>«Aubar, expresión mirada amplia abajo mirando a la derecha» |
-| Sorpresa izquierda | «Aubar, expresión sorpresa izquierda mirando a la izquierda»<br>«Aubar, expresión sorpresa izquierda mirando al centro»<br>«Aubar, expresión sorpresa izquierda mirando a la derecha» |
-| Somnoliento | «Aubar, expresión somnoliento mirando a la izquierda»<br>«Aubar, expresión somnoliento mirando al centro»<br>«Aubar, expresión somnoliento mirando a la derecha» |
-| Curioso izquierda | «Aubar, expresión curioso izquierda mirando a la izquierda»<br>«Aubar, expresión curioso izquierda mirando al centro»<br>«Aubar, expresión curioso izquierda mirando a la derecha» |
-| Asimétrico abajo derecha | «Aubar, expresión asimétrico abajo derecha mirando a la izquierda»<br>«Aubar, expresión asimétrico abajo derecha mirando al centro»<br>«Aubar, expresión asimétrico abajo derecha mirando a la derecha» |
-| Atento izquierda | «Aubar, expresión atento izquierda mirando a la izquierda»<br>«Aubar, expresión atento izquierda mirando al centro»<br>«Aubar, expresión atento izquierda mirando a la derecha» |
-| Alegre abajo derecha | «Aubar, expresión alegre abajo derecha mirando a la izquierda»<br>«Aubar, expresión alegre abajo derecha mirando al centro»<br>«Aubar, expresión alegre abajo derecha mirando a la derecha» |
-| Escéptico izquierda | «Aubar, expresión escéptico izquierda mirando a la izquierda»<br>«Aubar, expresión escéptico izquierda mirando al centro»<br>«Aubar, expresión escéptico izquierda mirando a la derecha» |
-| Mirada derecha | «Aubar, expresión mirada derecha mirando a la izquierda»<br>«Aubar, expresión mirada derecha mirando al centro»<br>«Aubar, expresión mirada derecha mirando a la derecha» |
-| Enojado izquierda | «Aubar, expresión enojado izquierda mirando a la izquierda»<br>«Aubar, expresión enojado izquierda mirando al centro»<br>«Aubar, expresión enojado izquierda mirando a la derecha» |
-| Juguetón derecha | «Aubar, expresión juguetón derecha mirando a la izquierda»<br>«Aubar, expresión juguetón derecha mirando al centro»<br>«Aubar, expresión juguetón derecha mirando a la derecha» |
-| Asimétrico arriba izquierda | «Aubar, expresión asimétrico arriba izquierda mirando a la izquierda»<br>«Aubar, expresión asimétrico arriba izquierda mirando al centro»<br>«Aubar, expresión asimétrico arriba izquierda mirando a la derecha» |
-| Mirada suave abajo | «Aubar, expresión mirada suave abajo mirando a la izquierda»<br>«Aubar, expresión mirada suave abajo mirando al centro»<br>«Aubar, expresión mirada suave abajo mirando a la derecha» |
-| Mirada amplia abajo izquierda | «Aubar, expresión mirada amplia abajo izquierda mirando a la izquierda»<br>«Aubar, expresión mirada amplia abajo izquierda mirando al centro»<br>«Aubar, expresión mirada amplia abajo izquierda mirando a la derecha» |
-| Adormilado | «Aubar, expresión adormilado mirando a la izquierda»<br>«Aubar, expresión adormilado mirando al centro»<br>«Aubar, expresión adormilado mirando a la derecha» |
-| Sospechoso derecha | «Aubar, expresión sospechoso derecha mirando a la izquierda»<br>«Aubar, expresión sospechoso derecha mirando al centro»<br>«Aubar, expresión sospechoso derecha mirando a la derecha» |
-| Tímido | «Aubar, expresión tímido mirando a la izquierda»<br>«Aubar, expresión tímido mirando al centro»<br>«Aubar, expresión tímido mirando a la derecha» |
-| Cejas enojadas | «Aubar, expresión cejas enojadas mirando a la izquierda»<br>«Aubar, expresión cejas enojadas mirando al centro»<br>«Aubar, expresión cejas enojadas mirando a la derecha» |
-| Inquieto izquierda | «Aubar, expresión inquieto izquierda mirando a la izquierda»<br>«Aubar, expresión inquieto izquierda mirando al centro»<br>«Aubar, expresión inquieto izquierda mirando a la derecha» |
+| Neutral | «neutral izquierda»<br>«neutral centro»<br>«neutral derecha» |
+| Contento | «contento izquierda»<br>«contento centro»<br>«contento derecha» |
+| Sorprendido | «sorprendido izquierda»<br>«sorprendido centro»<br>«sorprendido derecha» |
+| Dormido | «dormido izquierda»<br>«dormido centro»<br>«dormido derecha» |
+| Enojado | «enojado izquierda»<br>«enojado centro»<br>«enojado derecha» |
+| Mirada lateral arriba | «mirada lateral arriba mirando a la izquierda»<br>«mirada lateral arriba mirando al centro»<br>«mirada lateral arriba mirando a la derecha» |
+| Mirada abajo | «mirada abajo mirando a la izquierda»<br>«mirada abajo mirando al centro»<br>«mirada abajo mirando a la derecha» |
+| Escéptico derecha | «escéptico derecha mirando a la izquierda»<br>«escéptico derecha mirando al centro»<br>«escéptico derecha mirando a la derecha» |
+| Atento pequeño | «atento pequeño mirando a la izquierda»<br>«atento pequeño mirando al centro»<br>«atento pequeño mirando a la derecha» |
+| Mirada amplia abajo | «mirada amplia abajo mirando a la izquierda»<br>«mirada amplia abajo mirando al centro»<br>«mirada amplia abajo mirando a la derecha» |
+| Sorpresa izquierda | «sorpresa izquierda mirando a la izquierda»<br>«sorpresa izquierda mirando al centro»<br>«sorpresa izquierda mirando a la derecha» |
+| Somnoliento | «somnoliento mirando a la izquierda»<br>«somnoliento mirando al centro»<br>«somnoliento mirando a la derecha» |
+| Curioso izquierda | «curioso izquierda mirando a la izquierda»<br>«curioso izquierda mirando al centro»<br>«curioso izquierda mirando a la derecha» |
+| Asimétrico abajo derecha | «asimétrico abajo derecha mirando a la izquierda»<br>«asimétrico abajo derecha mirando al centro»<br>«asimétrico abajo derecha mirando a la derecha» |
+| Atento izquierda | «atento izquierda mirando a la izquierda»<br>«atento izquierda mirando al centro»<br>«atento izquierda mirando a la derecha» |
+| Alegre abajo derecha | «alegre abajo derecha mirando a la izquierda»<br>«alegre abajo derecha mirando al centro»<br>«alegre abajo derecha mirando a la derecha» |
+| Escéptico izquierda | «escéptico izquierda mirando a la izquierda»<br>«escéptico izquierda mirando al centro»<br>«escéptico izquierda mirando a la derecha» |
+| Mirada derecha | «mirada derecha mirando a la izquierda»<br>«mirada derecha mirando al centro»<br>«mirada derecha mirando a la derecha» |
+| Enojado izquierda | «enojado izquierda mirando a la izquierda»<br>«enojado izquierda mirando al centro»<br>«enojado izquierda mirando a la derecha» |
+| Juguetón derecha | «juguetón derecha mirando a la izquierda»<br>«juguetón derecha mirando al centro»<br>«juguetón derecha mirando a la derecha» |
+| Asimétrico arriba izquierda | «asimétrico arriba izquierda mirando a la izquierda»<br>«asimétrico arriba izquierda mirando al centro»<br>«asimétrico arriba izquierda mirando a la derecha» |
+| Mirada suave abajo | «mirada suave abajo mirando a la izquierda»<br>«mirada suave abajo mirando al centro»<br>«mirada suave abajo mirando a la derecha» |
+| Mirada amplia abajo izquierda | «mirada amplia abajo izquierda mirando a la izquierda»<br>«mirada amplia abajo izquierda mirando al centro»<br>«mirada amplia abajo izquierda mirando a la derecha» |
+| Adormilado | «adormilado mirando a la izquierda»<br>«adormilado mirando al centro»<br>«adormilado mirando a la derecha» |
+| Sospechoso derecha | «sospechoso derecha mirando a la izquierda»<br>«sospechoso derecha mirando al centro»<br>«sospechoso derecha mirando a la derecha» |
+| Tímido | «tímido mirando a la izquierda»<br>«tímido mirando al centro»<br>«tímido mirando a la derecha» |
+| Cejas enojadas | «cejas enojadas mirando a la izquierda»<br>«cejas enojadas mirando al centro»<br>«cejas enojadas mirando a la derecha» |
+| Inquieto izquierda | «inquieto izquierda mirando a la izquierda»<br>«inquieto izquierda mirando al centro»<br>«inquieto izquierda mirando a la derecha» |
 
 </details>
 
@@ -159,34 +208,33 @@ como en la lista, para distinguir el nombre de la pose de la mirada solicitada.
 
 | Animación | Comandos combinados |
 | --- | --- |
-| Dormir | «Aubar, dormir izquierda»<br>«Aubar, dormir centro»<br>«Aubar, dormir derecha» |
-| Despertar | «Aubar, despertar izquierda»<br>«Aubar, despertar centro»<br>«Aubar, despertar derecha» |
-| Reposo | «Aubar, reposo izquierda»<br>«Aubar, reposo centro»<br>«Aubar, reposo derecha» |
-| Escuchar | «Aubar, escuchar izquierda»<br>«Aubar, escuchar centro»<br>«Aubar, escuchar derecha» |
-| Pensar | «Aubar, pensar izquierda»<br>«Aubar, pensar centro»<br>«Aubar, pensar derecha» |
-| Buscar | «Aubar, buscar izquierda»<br>«Aubar, buscar centro»<br>«Aubar, buscar derecha» |
-| Trabajar | «Aubar, trabajar izquierda»<br>«Aubar, trabajar centro»<br>«Aubar, trabajar derecha» |
-| Entusiasmarse | «Aubar, entusiasmarse izquierda»<br>«Aubar, entusiasmarse centro»<br>«Aubar, entusiasmarse derecha» |
-| Aburrirse | «Aubar, aburrirse izquierda»<br>«Aubar, aburrirse centro»<br>«Aubar, aburrirse derecha» |
-| Sospechar | «Aubar, sospechar izquierda»<br>«Aubar, sospechar centro»<br>«Aubar, sospechar derecha» |
-| Enojarse | «Aubar, enojarse izquierda»<br>«Aubar, enojarse centro»<br>«Aubar, enojarse derecha» |
-| Adormecerse | «Aubar, adormecerse izquierda»<br>«Aubar, adormecerse centro»<br>«Aubar, adormecerse derecha» |
-| Alegría | «Aubar, alegría izquierda»<br>«Aubar, alegría centro»<br>«Aubar, alegría derecha» |
-| Curiosear | «Aubar, curiosear izquierda»<br>«Aubar, curiosear centro»<br>«Aubar, curiosear derecha» |
-| Confundirse | «Aubar, confundirse izquierda»<br>«Aubar, confundirse centro»<br>«Aubar, confundirse derecha» |
-| Sorprenderse | «Aubar, sorprenderse izquierda»<br>«Aubar, sorprenderse centro»<br>«Aubar, sorprenderse derecha» |
-| Orgullo | «Aubar, orgullo izquierda»<br>«Aubar, orgullo centro»<br>«Aubar, orgullo derecha» |
-| Timidez | «Aubar, timidez izquierda»<br>«Aubar, timidez centro»<br>«Aubar, timidez derecha» |
-| Tristeza | «Aubar, tristeza izquierda»<br>«Aubar, tristeza centro»<br>«Aubar, tristeza derecha» |
-| Reír | «Aubar, reír izquierda»<br>«Aubar, reír centro»<br>«Aubar, reír derecha» |
-| Asustarse | «Aubar, asustarse izquierda»<br>«Aubar, asustarse centro»<br>«Aubar, asustarse derecha» |
-| Jugar | «Aubar, jugar izquierda»<br>«Aubar, jugar centro»<br>«Aubar, jugar derecha» |
-| Celebrar | «Aubar, celebrar izquierda»<br>«Aubar, celebrar centro»<br>«Aubar, celebrar derecha» |
+| Dormir | «dormir izquierda»<br>«dormir centro»<br>«dormir derecha» |
+| Despertar | «despertar izquierda»<br>«despertar centro»<br>«despertar derecha» |
+| Reposo | «reposo izquierda»<br>«reposo centro»<br>«reposo derecha» |
+| Escuchar | «escuchar izquierda»<br>«escuchar centro»<br>«escuchar derecha» |
+| Pensar | «pensar izquierda»<br>«pensar centro»<br>«pensar derecha» |
+| Buscar | «buscar izquierda»<br>«buscar centro»<br>«buscar derecha» |
+| Trabajar | «trabajar izquierda»<br>«trabajar centro»<br>«trabajar derecha» |
+| Entusiasmarse | «entusiasmarse izquierda»<br>«entusiasmarse centro»<br>«entusiasmarse derecha» |
+| Aburrirse | «aburrirse izquierda»<br>«aburrirse centro»<br>«aburrirse derecha» |
+| Sospechar | «sospechar izquierda»<br>«sospechar centro»<br>«sospechar derecha» |
+| Enojarse | «enojarse izquierda»<br>«enojarse centro»<br>«enojarse derecha» |
+| Adormecerse | «adormecerse izquierda»<br>«adormecerse centro»<br>«adormecerse derecha» |
+| Alegría | «alegría izquierda»<br>«alegría centro»<br>«alegría derecha» |
+| Curiosear | «curiosear izquierda»<br>«curiosear centro»<br>«curiosear derecha» |
+| Confundirse | «confundirse izquierda»<br>«confundirse centro»<br>«confundirse derecha» |
+| Sorprenderse | «sorprenderse izquierda»<br>«sorprenderse centro»<br>«sorprenderse derecha» |
+| Orgullo | «orgullo izquierda»<br>«orgullo centro»<br>«orgullo derecha» |
+| Timidez | «timidez izquierda»<br>«timidez centro»<br>«timidez derecha» |
+| Tristeza | «tristeza izquierda»<br>«tristeza centro»<br>«tristeza derecha» |
+| Reír | «reír izquierda»<br>«reír centro»<br>«reír derecha» |
+| Asustarse | «asustarse izquierda»<br>«asustarse centro»<br>«asustarse derecha» |
+| Jugar | «jugar izquierda»<br>«jugar centro»<br>«jugar derecha» |
+| Celebrar | «celebrar izquierda»<br>«celebrar centro»<br>«celebrar derecha» |
 
 </details>
 
-Más detalles de uso en la [guía del panel](docs/herramienta-pc.md) y el
-[catálogo del avatar](docs/catalogo-avatar.md).
+El catálogo también está disponible en la pestaña **Catálogo** del panel.
 
 ## Requisitos
 
@@ -338,8 +386,11 @@ firmware/KirbyPantalla/
   avatar_data.h          Datos del avatar listos para compilar
   avatar_render.h        Dibujo del personaje
 avatar-original/         Exportación del avatar y demo web
-tools/                   Generador de datos del avatar
-docs/images/             Imágenes de documentación y notas de edición
+pc/aubar_control/        Panel, micrófono, voz, IA y control de YouTube
+tools/                   Lanzador, instaladores y generador del avatar
+tests/pc/                Pruebas automáticas del panel y sus componentes
+docs/images/             Imágenes del prototipo
+.env.example             Plantilla de configuración local de Groq
 .gitignore               Exclusiones de Git
 readme.md                Requisitos e instrucciones del proyecto
 ```
@@ -378,6 +429,10 @@ Versión compilada con **esp32 by Espressif Systems 3.3.8** y cargada por USB
 en una **Waveshare ESP32-S3-LCD-1.47B**, el **26 de octubre de 2026**.
 La herramienta verificó los datos escritos y se confirmó visualmente
 que el avatar aparecía en la pantalla.
+
+El panel de PC pasó **217 pruebas automáticas** y la comprobación de dependencias
+con `pip check`. Se probó con Vosk, Groq, Dora, navegador y ESP32 reales, y se
+confirmó el funcionamiento con micrófono y parlantes el **27 de octubre de 2026**.
 
 ## Créditos y documentación
 
