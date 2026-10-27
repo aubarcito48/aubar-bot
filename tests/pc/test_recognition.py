@@ -41,12 +41,28 @@ class FakeBackend:
         self.models += 1
         return object()
 
-    def KaldiRecognizer(self, model, rate):
+    def KaldiRecognizer(self, model, rate, grammar=None):
         self.rate = rate
         return FakeDecoder(self)
 
 
 class VoiceTests(unittest.TestCase):
+    def test_static_model_never_receives_an_unsupported_runtime_grammar(self):
+        class StaticBackend(FakeBackend):
+            def KaldiRecognizer(self,model,rate,grammar=None):
+                if grammar is not None:
+                    raise AssertionError('Static model cannot receive a runtime grammar')
+                return super().KaldiRecognizer(model,rate)
+        decoded=result('ayudar como estas')
+        for index,word in enumerate(decoded['result']):
+            word.update(start=.2+index*.4,end=.6+index*.4)
+        engine=LocalRecognizer(backend=StaticBackend(decoded))
+        engine.supports_grammar=False
+        recording=Recording(array('h',[3000]*32000).tobytes(),16000)
+        self.assertEqual(engine.recognize_automatic(recording).query,'ayudar como estas')
+        engine.backend.final=result('contento')
+        self.assertEqual(engine.recognize_automatic(recording).action.argument,'contento')
+
     def test_spanish_commands_accents_and_politeness(self):
         phrases = {
             '¡Contento!': ('EXPRESSION', 'contento'),

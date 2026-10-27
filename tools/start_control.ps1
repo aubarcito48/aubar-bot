@@ -21,7 +21,7 @@ if (-not (Test-Path -LiteralPath $kirbyPython)) {
 
 & $kirbyPython -c 'import sys; assert sys.version_info >= (3, 11); import tkinter'
 if ($LASTEXITCODE -ne 0) { throw 'Se necesita Python 3.11 o superior con tkinter.' }
-& $kirbyPython -c 'import serial, sounddevice, vosk; assert serial.VERSION == str(3.5)'
+& $kirbyPython -c 'import serial, sounddevice, vosk, kokoro_onnx, dotenv, yt_dlp, sys; from importlib.metadata import version; assert serial.VERSION == str(3.5); assert version(sys.argv[1]) == sys.argv[2]; assert version(sys.argv[3]) == sys.argv[4]; assert version(sys.argv[5]) == sys.argv[6]' kokoro-onnx 0.4.7 python-dotenv 1.2.4 yt-dlp 2026.10.26
 if ($LASTEXITCODE -ne 0) {
     & $kirbyPython -m pip install -r (Join-Path $kirbyRoot 'pc\requirements.txt')
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias. Revisa la conexion a internet.' }
@@ -29,6 +29,9 @@ if ($LASTEXITCODE -ne 0) {
 
 & $kirbyPython (Join-Path $kirbyRoot 'tools\install_voice_model.py')
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el modelo local de espanol.' }
+
+& $kirbyPython (Join-Path $kirbyRoot 'tools\install_tts_model.py')
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la voz local de Dora.' }
 
 # This is the interactive application requested by the user; pythonw avoids
 # a separate console while leaving the desktop window visible.

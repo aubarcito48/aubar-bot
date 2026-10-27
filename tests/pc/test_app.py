@@ -4,13 +4,14 @@ import tkinter as tk
 import unittest
 from array import array
 from dataclasses import replace
-from audio_fakes import FakeAudio, FakeRecognizer
+from audio_fakes import FakeAudio, FakeRecognizer, FakeSpeechEngine
 
 from pc.aubar_control.app import AubarApp
 from pc.aubar_control.protocol import DeviceError, DeviceStatus
 from pc.aubar_control.session import DevicePort
 from pc.aubar_control.audio import InputDevice, MicrophoneCapture
 from pc.aubar_control.recognition import RecognitionResult
+from pc.aubar_control.config import load_groq_config
 
 
 class FakeSession:
@@ -62,7 +63,8 @@ class AppTests(unittest.TestCase):
         self.recognizer = FakeRecognizer()
         self.app = AubarApp(self.root, self.session, lambda: self.ports,
                            MicrophoneCapture(self.audio), lambda: [InputDevice(1, 'Microfono', 'Prueba', True)],
-                           self.recognizer)
+                           self.recognizer,speech=FakeSpeechEngine(),
+                           config_loader=lambda:load_groq_config(env_path=None,environ={}))
         self.pump(lambda: not self.app.busy and not self.app.audio_scan_busy)
 
     def tearDown(self):
