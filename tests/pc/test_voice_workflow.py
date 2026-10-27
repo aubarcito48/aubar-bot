@@ -92,7 +92,7 @@ class VoiceWorkflowTests(unittest.TestCase):
                 if request.startswith((b'EXPRESSION ',b'LOOK ',b'ANIMATION ',b'MODE '))]
 
     def test_combined_actions_rejections_and_mode_complete_a_listening_cycle(self):
-        self.phrase('aubar enojado derecha')
+        self.phrase('enojado derecha')
         self.pump(lambda:len(self.voice.calls)==1)
         self.assertEqual(self.actions(),[b'EXPRESSION enojado derecha\n'])
         self.assertEqual(self.app.values['expression'].get(),'Enojado')
@@ -103,22 +103,22 @@ class VoiceWorkflowTests(unittest.TestCase):
         self.phrase('aubar celebrar izquierda')
         self.assertTrue(self.app.automatic_capture.utterances.empty())
         self.finish_response()
-        for text in ('contento','aubar hoy hace frio','aubar no te pongas contento'):
+        for text in ('hoy hace frio','aubar hoy hace frio','aubar no te pongas contento'):
             self.phrase(text)
             expected=text.removeprefix('aubar ')
             self.pump(lambda:self.app.recognition_text.get()==expected)
             self.pump(lambda:self.app.automatic_capture.listening.is_set())
-            self.assertEqual(self.app.recognized_query,expected if text.startswith('aubar ') else None)
+            self.assertEqual(self.app.recognized_query,expected)
             self.assertEqual(len(self.actions()),1)
             self.assertEqual(len(self.voice.calls),1)
-        self.phrase('aubar celebrar izquierda')
+        self.phrase('celebrar izquierda')
         self.pump(lambda:len(self.voice.calls)==2)
         self.assertEqual(self.actions()[-1],b'ANIMATION celebrate izquierda\n')
         self.assertEqual(self.app.animation_value.get(),'Animación: Celebrar')
         self.assertEqual(self.app.values['look'].get(),'Izquierda')
         self.assertEqual(self.voice.calls[-1],'Voy a celebrar mirando a la izquierda.')
         self.finish_response()
-        self.phrase('aubar modo automatico')
+        self.phrase('modo automatico')
         self.pump(lambda:len(self.voice.calls)==3)
         self.assertEqual(self.actions()[-1],b'MODE auto\n')
         self.assertEqual(self.app.values['mode'].get(),'Automático')

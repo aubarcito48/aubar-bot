@@ -85,11 +85,12 @@ class AutomaticRecognitionTests(unittest.TestCase):
         engine=LocalRecognizer(backend=FakeBackend(result(text,confidence)))
         return engine.recognize_automatic(Recording(pcm(1,3000),16000))
 
-    def test_aubar_is_required_and_unknown_or_negated_speech_stays_inactive(self):
-        for phrase in ('contento','kirby contento','hoy hace frio',
+    def test_direct_commands_work_and_queries_or_negations_are_not_usb_commands(self):
+        for phrase in ('hoy hace frio',
                        'aubar no te pongas contento','aubar contento y celebrar'):
             self.assertIsNone(self.recognize(phrase).action,phrase)
-        for phrase,argument in (('aubar contento','contento'),('aubar celebrar','celebrate'),
+        for phrase,argument in (('contento','contento'),('celebrar','celebrate'),
+                                ('enojado derecha','enojado'),('aubar contento','contento'),('aubar celebrar','celebrate'),
                                 ('aubar mira a la izquierda','izquierda')):
             self.assertEqual(self.recognize(phrase).action.argument,argument)
         self.assertIsNone(self.recognize('aubar contento',.4).action)

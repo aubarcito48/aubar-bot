@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError
 import logging
 from pathlib import Path
 from queue import Empty, Queue
+from threading import Event
 import tkinter as tk
 from tkinter import ttk
 
@@ -20,6 +21,8 @@ from .config import load_groq_config
 from .groq_client import GroqService, GroqError, TEST_QUERY
 from .conversation import Conversation
 from .ai_avatar import AvatarCue,normalize_reply,safe_avatar_action
+from .youtube import open_youtube
+from .microphone_probe import MicrophoneProbe
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -30,8 +33,16 @@ PINK = "#ffc2e9"
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
                  capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None,
-                 reply_provider=confirmation_text, config_loader=load_groq_config, ai_service=None):
+                 reply_provider=confirmation_text, config_loader=load_groq_config, ai_service=None,
+                 youtube_opener=open_youtube, microphone_probe=None):
         self.root = root
+        self.youtube_opener=youtube_opener
+        self._youtube_pending=False
+        self._youtube_cancel=Event()
+        self.microphone_probe=microphone_probe or MicrophoneProbe()
+        self._probe_recording=False
+        self._probe_timer=None
+        self._probe_playback_token=None
         self.config_loader=config_loader
         self.ai_service=ai_service or GroqService()
         self._avatar_generation=0
@@ -95,10 +106,11 @@ class AubarApp:
         self.inputs = {}
         self.last_recording = None
         self.recognizer = recognizer or LocalRecognizer()
+        self.recognition_ready=not isinstance(self.recognizer,LocalRecognizer) or self.recognizer.backend is not None
         self.recognized_action = None
         self.recognized_query = None
         self.recognition_text = tk.StringVar(value="Todavía no hay una frase reconocida.")
-        self.recognition_message = tk.StringVar(value="Probá un comando o «Aubar, cómo estás». En automática, empezá con «Aubar».")
+        self.recognition_message = tk.StringVar(value="Decí un comando o una pregunta directamente, sin decir el nombre.")
         self.mic_value = tk.StringVar()
         self.audio_message = tk.StringVar(value="Buscando micrófonos…")
         self.connected = False
@@ -121,6 +133,9 @@ class AubarApp:
         self._poll_timer = root.after(1500, self._poll)
         self.refresh_ports()
         self.refresh_microphones()
+        if not self.recognition_ready:
+            self.recognition_message.set('Preparando el reconocimiento de español. Esperá a que termine para hablar.')
+            self._audio_submit('recognizer_ready',self.recognizer.prepare)
 
     def _build(self):
         self.root.title("Aubar Bot — Panel")
@@ -136,6 +151,7 @@ class AubarApp:
         style.configure("Title.TLabel", font=("Segoe UI", 28, "bold"))
         style.configure("Section.TLabel", font=("Segoe UI", 14, "bold"))
         style.configure("TButton", padding=(14, 9), font=("Segoe UI", 10), foreground=INK)
+        style.configure("Compact.TButton",padding=(8,3),font=("Segoe UI",10),foreground=INK)
         style.configure("Primary.TButton", background=PINK, foreground="#35263e", borderwidth=0)
         style.map("Primary.TButton", background=[("active", "#f2aedc"), ("disabled", "#e8eaf0")])
         style.configure("TCombobox", padding=8, font=("Segoe UI", 10))
@@ -286,6 +302,7 @@ class AubarApp:
                 or self._pending_ai_avatar is not None or self._ai_avatar_inflight)
 
     def _invalidate_ai_turn(self,restore_visual=True):
+        self._youtube_cancel.set()
         self.ai_generation+=1
         self.conversation.invalidate_pending()
         self._ai_conversation_request=None
@@ -677,7 +694,7 @@ class AubarApp:
         self._audio_controls()
 
     def _microphone_blocked(self):
-        return self.playback_gate.blocked or self._speech_future is not None or self.speech.busy or self._conversation_blocks_microphone()
+        return self._youtube_pending or self.playback_gate.blocked or self._speech_future is not None or self.speech.busy or self._conversation_blocks_microphone()
 
     def _refresh_playback_gate(self):
         blocked=self._microphone_blocked()
@@ -744,7 +761,7 @@ class AubarApp:
         self.catalog_buttons.append(demo)
         ttk.Label(panel, textvariable=self.catalog_message, wraplength=650).grid(row=9, column=0, columnspan=2, sticky="w")
         ttk.Label(panel, text="Voz: «pensar», «reír», «celebrar», «dormir»…\n"
-                  "También: «Aubar, enojado derecha» o «Aubar, celebrar izquierda».\n"
+                  "También: «enojado derecha» o «celebrar izquierda».\n"
                   "Para una pose fija: «expresión tímido» o «expresión cejas enojadas».\n"
                   "BOOT adelanta la animación; en una expresión fija, pasa a la siguiente.",
                   style="Muted.TLabel", wraplength=650).grid(row=10, column=0, columnspan=2, sticky="w", pady=(20, 0))
@@ -769,6 +786,8 @@ class AubarApp:
     def _build_microphone(self, panel):
         panel.columnconfigure(0, weight=1)
         ttk.Label(panel, text="Elegí tu micrófono", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 12))
+        self.probe_button=ttk.Button(panel,text='Probar micrófono',command=self.test_microphone,style='Compact.TButton')
+        self.probe_button.grid(row=0,column=1,sticky='e',pady=(0,12))
         self.mic_combo = ttk.Combobox(panel, textvariable=self.mic_value, state="readonly")
         self.mic_combo.grid(row=1, column=0, sticky="ew", padx=(0, 10))
         self.mic_combo.bind("<<ComboboxSelected>>", lambda _: self._audio_controls())
@@ -776,10 +795,10 @@ class AubarApp:
         self.mic_scan_button.grid(row=1, column=1)
         modes = ttk.Frame(panel)
         modes.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 8))
-        self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · «Aubar» + comando o pregunta",
+        self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · comandos y preguntas directos",
             variable=self.auto_enabled, command=self.toggle_automatic)
         self.auto_check.pack(anchor="w")
-        ttk.Label(modes, text="Automática: empezá con «Aubar». Manual: mantené pulsado y preguntá sin decir el nombre.",
+        ttk.Label(modes, text="Decí el comando o la pregunta directamente. En manual, mantené pulsado el botón.",
                   style="Muted.TLabel", wraplength=650).pack(anchor="w", pady=(6, 0))
         self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",
                                      activebackground="#f2aedc", font=("Segoe UI", 13, "bold"),
@@ -795,25 +814,28 @@ class AubarApp:
                                     font=("Segoe UI", 11), anchor="w", wraplength=650, pady=8)
         self.audio_label.grid(row=4, column=0, columnspan=2, sticky="ew")
         self.level_bar = ttk.Progressbar(panel, maximum=100, mode="determinate")
-        self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 12))
-        ttk.Label(panel, text="Automática sigue al minimizar; apagá la casilla para cerrar el micrófono.\n"
-                  "Una pausa de 0,8 s termina la frase. Manual se detiene al soltar o salir.",
+        self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        ttk.Label(panel, text="Automática: pausa de 0,8 s. Manual: soltá el botón para terminar.",
                   style="Muted.TLabel", wraplength=650).grid(row=6, column=0, columnspan=2, sticky="w")
-        ttk.Label(panel, text="Lo que escuché", style="Section.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 8))
+        ttk.Label(panel, text="Lo que escuché", style="Section.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 4))
         tk.Label(panel, textvariable=self.recognition_text, bg="white", fg=INK,
-                 font=("Segoe UI", 12), anchor="w", justify="left", wraplength=620,
-                 padx=12, pady=8, height=2).grid(row=8, column=0, columnspan=2, sticky="ew")
-        ttk.Label(panel, textvariable=self.recognition_message, wraplength=640).grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 0))
+                 font=("Segoe UI", 11), anchor="w", justify="left", wraplength=600,
+                 padx=12, pady=6, height=2).grid(row=8, column=0, columnspan=2, sticky="ew")
+        ttk.Label(panel, textvariable=self.recognition_message, wraplength=600).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
         self._audio_controls()
 
     def _audio_controls(self):
         idle = self.audio_phase == "idle" and not self.audio_scan_busy and not self.auto_enabled.get()
         self.mic_combo.configure(state="readonly" if idle else "disabled")
         self.mic_scan_button.configure(state="normal" if idle else "disabled")
+        probing=self._probe_recording or self.audio_phase=='probe_playback'
+        self.probe_button.configure(text='Detener prueba' if probing else 'Probar micrófono',
+            state='normal' if probing or (idle and self.recognition_ready and not self._microphone_blocked() and not self.voice_inflight
+                                         and self.mic_value.get() in self.inputs) else 'disabled')
         # Keep the button enabled during recording so it receives release events.
-        allowed = not self._microphone_blocked() and not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
+        allowed = self.recognition_ready and not self._microphone_blocked() and not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
         self.talk_button.configure(state="normal" if allowed else "disabled")
-        auto_allowed = self.auto_enabled.get() or (idle and not self._microphone_blocked() and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
+        auto_allowed = self.auto_enabled.get() or (idle and self.recognition_ready and not self._microphone_blocked() and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
         self.auto_check.configure(state="normal" if auto_allowed else "disabled")
         if hasattr(self, 'catalog_buttons'):
             for button in self.catalog_buttons:
@@ -839,12 +861,13 @@ class AubarApp:
         self._audio_controls()
         self._audio_submit("inputs", self.audio_provider)
 
-    def start_recording(self, event=None):
-        if self._microphone_blocked() or self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
+    def start_recording(self, event=None, *, probe=False):
+        if not self.recognition_ready or self._microphone_blocked() or self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
             return "break"
         device = self.inputs.get(self.mic_value.get())
         if device is None:
             return "break"
+        self._probe_recording=probe
         self.talk_button.focus_set()
         self.last_recording = None
         self.capture_connection_token = self.connection_token if self.connected else None
@@ -866,6 +889,8 @@ class AubarApp:
         return "break"
 
     def stop_recording(self, event=None):
+        if self._probe_recording and event is not None:
+            return
         if self.closed or self.audio_phase not in ("starting", "warming", "recording"):
             return
         self.capture.cancel()
@@ -873,6 +898,30 @@ class AubarApp:
         self.audio_message.set("Cerrando micrófono…")
         self._audio_controls()
         self._audio_submit("stop", self.capture.finish)
+
+    def test_microphone(self):
+        if self._probe_recording:
+            self._clear_probe_timer()
+            self._probe_recording=False
+            self.audio_failed=True
+            self.stop_recording()
+            return
+        if self.audio_phase=='probe_playback':
+            self.microphone_probe.stop()
+            return
+        self.start_recording(probe=True)
+        if self._probe_recording:
+            self.recognition_text.set('Prueba de micrófono: no se ejecutan comandos.')
+            self.recognition_message.set('Al indicar Escuchando, hablá unos cuatro segundos. Después vas a escucharte.')
+
+    def _clear_probe_timer(self):
+        if self._probe_timer is not None:
+            self.root.after_cancel(self._probe_timer)
+            self._probe_timer=None
+
+    def _finish_probe_playback(self):
+        self.playback_gate.finish(self._probe_playback_token)
+        self._probe_playback_token=None
 
     def _focus_out(self, event):
         def check_focus():
@@ -884,11 +933,33 @@ class AubarApp:
         try:
             while True:
                 operation, result, error = self.audio_events.get_nowait()
+                if operation=='recognizer_ready':
+                    self.recognition_ready=error is None
+                    self.recognition_message.set(str(error) if error else 'Reconocimiento listo. Decí el comando o la pregunta directamente.')
+                    self._audio_controls()
+                    continue
+                if operation=='youtube':
+                    self._youtube_pending=False
+                    if self.audio_phase=='opening_browser':
+                        self.audio_phase='idle'
+                        self.talk_button.configure(text='Mantené pulsado para hablar')
+                        self.level_bar['value']=0
+                    if not self._youtube_cancel.is_set():
+                        message,spoken=result if not error else ('No se pudo abrir YouTube. Probá de nuevo.',None)
+                        self.recognition_message.set(message)
+                        if spoken and self._capture_reply_generation==self.replies.generation:
+                            self.speak_text(spoken)
+                    self._audio_controls()
+                    continue
                 if operation.startswith('auto_'):
                     self._handle_automatic_event(operation, result, error)
                     self._audio_controls()
                     continue
                 if error:
+                    if self._probe_recording or operation=='probe_playback':
+                        self._probe_recording=False
+                        self._clear_probe_timer()
+                        self._finish_probe_playback()
                     self.audio_failed = True
                     self.audio_phase = "idle"
                     self.audio_scan_busy = False
@@ -914,7 +985,19 @@ class AubarApp:
                         self.stop_recording()
                 elif operation == "stop":
                     self.audio_phase = "idle"
-                    if self.audio_failed:
+                    if self._probe_recording:
+                        self._probe_recording=False
+                        self._clear_probe_timer()
+                        self.last_recording=None
+                        if self.capture.overflow or result.duration<.15:
+                            self.recognition_message.set('La prueba quedó incompleta o perdió muestras. Repetí la prueba.')
+                        else:
+                            self.microphone_probe.arm()
+                            self.audio_phase='probe_playback'
+                            self._probe_playback_token=self.playback_gate.begin()
+                            self.audio_message.set('Escuchá cómo llega tu voz. El micrófono está cerrado.')
+                            self._audio_submit('probe_playback',lambda recording=result:self.microphone_probe.play(recording))
+                    elif self.audio_failed:
                         self.last_recording = None
                     elif result.duration >= 0.15:
                         self.last_recording = result
@@ -934,13 +1017,20 @@ class AubarApp:
                         self.recognition_text.set("—")
                         self.recognition_message.set("Captura demasiado corta para reconocer.")
                     self._log(self.audio_message.get())
+                elif operation=='probe_playback':
+                    self.audio_phase='idle'
+                    self._finish_probe_playback()
+                    self.recognition_message.set(result)
+                    self.audio_message.set('Prueba finalizada. Podés cambiar de entrada y repetirla.')
                 elif operation == "recognized":
                     self.audio_phase = "idle"
                     self.recognized_action = result.action
                     self.recognized_query = result.query
                     self.recognition_text.set(result.query or result.text or "—")
                     self.recognition_message.set(result.message)
-                    if result.action is not None:
+                    if result.youtube is not None:
+                        self._open_youtube(result.youtube)
+                    elif result.action is not None:
                         if self.connected and self.capture_connection_token == self.connection_token:
                             self.pending_action = (self.connection_token, result.action)
                             self._pending_action_reply_generation=self._capture_reply_generation
@@ -960,20 +1050,38 @@ class AubarApp:
         if self.audio_phase == "warming":
             if self.capture.ready.is_set():
                 self.audio_phase = "recording"
+                if self._probe_recording and self._probe_timer is None:
+                    self._probe_timer=self.root.after(4000,self.stop_recording)
             elif self.capture.finished.is_set():
                 self.stop_recording()
         if self.audio_phase == "recording":
             self.level_bar['value'] = self.capture.level*100
-            self.audio_message.set(f"Escuchando… {self.capture.duration:.1f} / 10 s. Soltá para terminar.")
+            self.audio_message.set(f"Escuchando… {self.capture.duration:.1f} / 4 s. Hablá normalmente." if self._probe_recording else
+                                   f"Escuchando… {self.capture.duration:.1f} / 10 s. Soltá para terminar.")
             if self.capture.limit_reached or self.capture.finished.is_set():
                 self.stop_recording()
+
+    def _open_youtube(self,action):
+        if (self.closed or self._youtube_pending
+            or self._capture_ai_generation!=self.ai_generation
+            or self._capture_query_connection!=self.connection_token):
+            self.recognition_message.set('Comando de YouTube descartado: el estado cambió. Repetí la frase.')
+            return
+        self._youtube_cancel=Event()
+        cancel=self._youtube_cancel
+        self._youtube_pending=True
+        self.audio_phase='opening_browser'
+        self.automatic_capture.pause()
+        self.recognition_message.set('Abriendo YouTube en tu navegador…')
+        self._audio_submit('youtube',lambda: (('Acción descartada.',None) if cancel.is_set()
+                                            else self.youtube_opener(action,cancel_event=cancel)))
 
     def toggle_automatic(self):
         if not self.auto_enabled.get():
             self.stop_automatic()
             return
         device = self.inputs.get(self.mic_value.get())
-        if self._microphone_blocked() or self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
+        if not self.recognition_ready or self._microphone_blocked() or self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
             self.auto_enabled.set(False)
             self._audio_controls()
             return
@@ -982,7 +1090,7 @@ class AubarApp:
         self.automatic_capture.arm()
         self.audio_phase = 'auto_starting'
         self.audio_message.set('Preparando escucha automática…')
-        self.recognition_message.set('Decí «Aubar, enojado derecha» o «Aubar, cómo estás» cuando esté lista.')
+        self.recognition_message.set('Decí «enojado derecha» o «cómo estás» cuando esté lista.')
         self._audio_controls()
         self._audio_submit('auto_start', lambda: (generation, self.automatic_capture.start(device.index)))
 
@@ -1073,7 +1181,7 @@ class AubarApp:
             self.audio_message.set('Frase terminada. Reconociendo…')
             self.level_bar['value'] = 0
             self.recognition_text.set('Procesando la voz…')
-            self.recognition_message.set('Comprobando «Aubar» y la frase…')
+            self.recognition_message.set('Reconociendo el comando o la pregunta…')
             self._audio_controls()
             self._audio_submit('auto_recognized', lambda: (
                 generation, self.recognizer.recognize_automatic(recording)))
@@ -1086,7 +1194,7 @@ class AubarApp:
             self.level_bar['value'] = capture.level*100
             self.audio_message.set('Calibrando ruido ambiente… Esperá un instante sin hablar.' if capture.calibrating else
                                    'Voz detectada. Hacé una pausa al terminar…' if capture.speaking else
-                                   'Escucha automática activa. Decí «Aubar» seguido de un comando o una pregunta.')
+                                   'Escucha automática activa. Decí un comando o una pregunta directamente.')
 
     def _controls(self):
         def enable(widget, allowed):
@@ -1311,6 +1419,8 @@ class AubarApp:
         neutralize=(owner is not None and self.connected and owner.connection==self.connection_token
                     and owner.control==self._avatar_generation)
         self.closed = True
+        self._clear_probe_timer()
+        self.microphone_probe.stop()
         self._invalidate_ai_turn(restore_visual=False)
         self.ai_replies.cancel()
         self.recognized_query=None

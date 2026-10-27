@@ -14,7 +14,8 @@ from pc.aubar_control.voice_commands import match_command
 class QueryRecognitionTests(unittest.TestCase):
     def recognize(self,text,confidence=1,automatic=True):
         recognizer=LocalRecognizer(backend=FakeBackend(result(text,confidence)))
-        return recognizer.recognize(Recording(pcm(2,3000),16000),require_wake=automatic)
+        recording=Recording(pcm(2,3000),16000)
+        return recognizer.recognize_automatic(recording) if automatic else recognizer.recognize(recording)
 
     def test_questions_statements_and_greetings_are_queries_after_activation(self):
         for automatic in (True,False):
@@ -35,8 +36,10 @@ class QueryRecognitionTests(unittest.TestCase):
             self.assertIsNone(unclear.query)
         self.assertEqual(self.recognize('contento',automatic=False).action.argument,'contento')
 
-    def test_automatic_queries_require_activation_and_a_body(self):
-        for phrase in ('como estas','contame algo interesante','kirby como estas','aubar','au bar','a un bar'):
+    def test_automatic_queries_accept_direct_speech_but_not_name_alone(self):
+        for phrase in ('como estas','contame algo interesante'):
+            self.assertEqual(self.recognize(phrase).query,phrase)
+        for phrase in ('aubar','au bar','a un bar'):
             recognized=self.recognize(phrase)
             self.assertIsNone(recognized.action)
             self.assertIsNone(recognized.query)
@@ -47,7 +50,7 @@ class QueryRecognitionTests(unittest.TestCase):
             recognized=self.recognize(phrase,automatic=False)
             self.assertIsNone(recognized.action)
             self.assertEqual(recognized.query,phrase)
-            self.assertIsNone(self.recognize(phrase).query)
+            self.assertEqual(self.recognize(phrase).query,phrase)
         for phrase in ('aubar','au bar','a un bar'):
             self.assertIsNone(self.recognize(phrase,automatic=False).query)
 
@@ -93,16 +96,16 @@ class QueryRecognitionTests(unittest.TestCase):
         self.assertIsNone(recognized.query)
         decoded['result'][1]['conf']=1
         backend.wake['result'][1]['conf']=.4
-        self.assertIsNone(engine.recognize_automatic(audio).query)
+        self.assertEqual(engine.recognize_automatic(audio).query,'ayudar no enojado')
 
-    def test_unverified_phonetic_prefix_does_not_activate_a_query(self):
+    def test_unverified_optional_prefix_is_preserved_in_query(self):
         decoded=result('ayudar como estas')
         for index,word in enumerate(decoded['result']):
             word.update(start=.2+index*.4,end=.6+index*.4)
-        self.assertIsNone(LocalRecognizer(backend=FakeBackend(decoded)).recognize_automatic(
-            Recording(pcm(2,3000),16000)).query)
+        self.assertEqual(LocalRecognizer(backend=FakeBackend(decoded)).recognize_automatic(
+            Recording(pcm(2,3000),16000)).query,'ayudar como estas')
 
-    def test_asr_can_omit_name_only_if_prefix_audio_still_verifies_it(self):
+    def test_direct_transcript_does_not_need_optional_name_audio(self):
         class OmittedNameBackend(FakeBackend):
             def KaldiRecognizer(self,model,rate,grammar=None):
                 if grammar is None:
@@ -122,11 +125,11 @@ class QueryRecognitionTests(unittest.TestCase):
             action=match_command(phrase)
             self.assertEqual(recognized.action,action)
             self.assertEqual(recognized.query,None if action else phrase)
-            # The same transcript without acoustic proof must stay inactive.
+            # Removing optional name audio does not disable direct commands.
             backend.wake={'text':'[unk]','result':[dict(word='[unk]',conf=1,start=.2,end=.6)]}
             rejected=engine.recognize_automatic(audio)
-            self.assertIsNone(rejected.action)
-            self.assertIsNone(rejected.query)
+            self.assertEqual(rejected.action,action)
+            self.assertEqual(rejected.query,None if action else phrase)
 
 
 class QueryPanelTests(unittest.TestCase):
