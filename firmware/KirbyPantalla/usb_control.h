@@ -1,0 +1,102 @@
+#pragma once
+#include <stdio.h>
+#include "usb_protocol.h"
+#include "avatar_data.h"
+#include "avatar_controller.h"
+
+class UsbControl {
+ public:
+  const UsbCommand& command() const { return protocol_.command(); }
+
+  // Stream-like interface also permits testing with a bounded fake serial port.
+  // Apply one typed command before acknowledging it. The animation loop still
+  // owns drawing; APPLIED acknowledges the logical target, not a finished tween.
+  template <typename Port>
+  bool poll(Port& port, AvatarController& controller, uint32_t now) {
+    flush(port);
+    if (sent_ < responseLength_) return false;
+    for (size_t budget = 0; budget < 128 && port.available() > 0; ++budget) {
+      const UsbParseResult result = protocol_.feed(static_cast<char>(port.read()));
+      if (result == UsbParseResult::Incomplete) continue;
+      if (result == UsbParseResult::Valid) controller.apply(command(), now);
+      makeResponse(result, controller);
+      flush(port);
+      return result == UsbParseResult::Valid;
+    }
+    return false;
+  }
+
+ private:
+  template <typename Port>
+  void flush(Port& port) {
+    const int space = port.availableForWrite();
+    if(space>txCapacity_) txCapacity_=space;
+    if (space <= 0 || sent_ >= responseLength_) return;
+    // HWCDC can leave a final full 64-byte USB packet pending at a ring-buffer
+    // boundary. Queue LF separately after the payload drains: its short packet
+    // completes the host transfer. Never block or call HWCDC::flush(timeout=0).
+    const size_t payloadLength=responseLength_-1;
+    if(sent_==payloadLength) {
+      if(space>=txCapacity_)
+        sent_+=port.write(reinterpret_cast<const uint8_t*>(response_+sent_),1);
+      return;
+    }
+    const size_t remaining = payloadLength - sent_;
+    const size_t count = remaining < static_cast<size_t>(space) ? remaining : space;
+    sent_ += port.write(reinterpret_cast<const uint8_t*>(response_+sent_), count);
+  }
+
+  void makeResponse(UsbParseResult result, const AvatarController& controller) {
+    const char* response = nullptr;
+    switch (result) {
+      case UsbParseResult::Empty: response = "ERR EMPTY\n"; break;
+      case UsbParseResult::UnknownCommand: response = "ERR UNKNOWN_COMMAND\n"; break;
+      case UsbParseResult::InvalidArgument: response = "ERR INVALID_ARGUMENT\n"; break;
+      case UsbParseResult::TooLong: response = "ERR LINE_TOO_LONG\n"; break;
+      case UsbParseResult::InvalidCharacter: response = "ERR INVALID_CHARACTER\n"; break;
+      default: break;
+    }
+    if (response) snprintf(response_, sizeof(response_), "%s", response);
+    else {
+      const auto& cmd = command();
+      switch (cmd.type) {
+        case UsbCommandType::Ping:
+          snprintf(response_, sizeof(response_), "OK PONG 4\n"); break;
+        case UsbCommandType::Status:
+          snprintf(response_, sizeof(response_), "OK STATUS mode=%s expression=%s look=%s animation=%s\n",
+                   controller.mode() == UsbMode::Manual ? "manual" : "auto",
+                   controller.avatar().expression().name,
+                   controller.look() == UsbLook::Left ? "izquierda" :
+                   controller.look() == UsbLook::Right ? "derecha" : "centro",
+                   controller.animation()==AvatarAnimationId::None ? "none" :
+                   avatarAnimation(controller.animation()).name); break;
+        case UsbCommandType::Animation:
+          snprintf(response_, sizeof(response_), "OK APPLIED ANIMATION %s%s%s\n",
+                   avatarAnimation(cmd.animation).name,cmd.hasLook?" ":"",
+                   cmd.hasLook?lookName(cmd.look):""); break;
+        case UsbCommandType::Expression:
+          snprintf(response_, sizeof(response_), "OK APPLIED EXPRESSION %s%s%s\n",
+                   avatarExpression(cmd.expression).name,cmd.hasLook?" ":"",
+                   cmd.hasLook?lookName(cmd.look):""); break;
+        case UsbCommandType::Look:
+          snprintf(response_, sizeof(response_), "OK APPLIED LOOK %s\n",
+                   cmd.look == UsbLook::Left ? "izquierda" : cmd.look == UsbLook::Right ? "derecha" : "centro"); break;
+        case UsbCommandType::Mode:
+          snprintf(response_, sizeof(response_), "OK APPLIED MODE %s\n",
+                   cmd.mode == UsbMode::Manual ? "manual" : "auto"); break;
+      }
+    }
+    responseLength_ = strlen(response_);
+    sent_ = 0;
+  }
+
+  static const char* lookName(UsbLook look) {
+    return look==UsbLook::Left?"izquierda":look==UsbLook::Right?"derecha":"centro";
+  }
+
+  UsbProtocol protocol_;
+  char response_[160] = {};
+  size_t responseLength_ = 0;
+  size_t sent_ = 0;
+  int txCapacity_ = 0;
+};
