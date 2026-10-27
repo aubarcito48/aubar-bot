@@ -234,6 +234,14 @@ cambiar de paso, de animación o de expresión; **«Aubar, centro»** la centra 
 **«Aubar, modo automático»** restaura las orientaciones originales del catálogo.
 Las poses dormidas conservan los ojos cerrados y también pueden orientarse.
 
+## Motor de salida de voz
+
+El panel incorpora un motor local de texto a voz en español, independiente de
+los comandos del avatar. La [guía de voz local](voz-local.md) explica sus
+requisitos, la prueba audible desde la terminal y la API que se usará para
+las respuestas habladas. Los controles visuales y la coordinación con el
+micrófono se incorporan en las siguientes tareas del sprint.
+
 ## Modelo local
 
 El modelo está en `models/`, excluido de Git; el lanzador permite descargarlo

@@ -12,6 +12,7 @@ from .recognition import LocalRecognizer, RecognitionError
 from .catalog import EXPRESSIONS, ANIMATIONS
 from .voice_commands import VoiceAction
 from .automatic_audio import AutomaticCapture
+from .speech import SpeechEngine
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -21,7 +22,7 @@ PINK = "#ffc2e9"
 
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
-                 capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None):
+                 capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None):
         self.root = root
         self.session = session or DeviceSession()
         self.port_provider = port_provider
@@ -29,6 +30,7 @@ class AubarApp:
         self.events = Queue()
         self.capture = capture or MicrophoneCapture()
         self.automatic_capture = automatic_capture or AutomaticCapture(self.capture.backend)
+        self.speech = speech or SpeechEngine()
         self.auto_enabled = tk.BooleanVar(value=False)
         self.auto_generation = 0
         self.auto_running = False
@@ -665,6 +667,7 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.speech.close()
         self.auto_enabled.set(False)
         self.auto_generation += 1
         self.automatic_capture.cancel()
