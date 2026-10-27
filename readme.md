@@ -75,33 +75,35 @@ la confirmación del ESP32. Los siguientes comandos seleccionan una sola acción
 | Sorprendido | «sorprendido» |
 | Dormido | «dormido» |
 | Enojado | «enojado» |
-| Mirada lateral arriba | «expresión mirada lateral arriba» |
-| Mirada abajo | «expresión mirada abajo» |
-| Escéptico derecha | «expresión escéptico derecha» |
-| Atento pequeño | «expresión atento pequeño» |
-| Mirada amplia abajo | «expresión mirada amplia abajo» |
-| Sorpresa izquierda | «expresión sorpresa izquierda» |
-| Somnoliento | «expresión somnoliento» |
-| Curioso izquierda | «expresión curioso izquierda» |
-| Asimétrico abajo derecha | «expresión asimétrico abajo derecha» |
-| Atento izquierda | «expresión atento izquierda» |
-| Alegre abajo derecha | «expresión alegre abajo derecha» |
-| Escéptico izquierda | «expresión escéptico izquierda» |
-| Mirada derecha | «expresión mirada derecha» |
+| Mirada lateral arriba | «mirada lateral arriba» |
+| Mirada abajo | «mirada abajo» |
+| Escéptico derecha | «escéptico derecha» |
+| Atento pequeño | «atento pequeño» |
+| Mirada amplia abajo | «mirada amplia abajo» |
+| Sorpresa izquierda | «sorpresa izquierda» |
+| Somnoliento | «somnoliento» |
+| Curioso izquierda | «curioso izquierda» |
+| Asimétrico abajo derecha | «asimétrico abajo derecha» |
+| Atento izquierda | «atento izquierda» |
+| Alegre abajo derecha | «alegre abajo derecha» |
+| Escéptico izquierda | «escéptico izquierda» |
+| Mirada derecha | «mirada derecha» |
 | Enojado izquierda | «expresión enojado izquierda» |
-| Juguetón derecha | «expresión juguetón derecha» |
-| Asimétrico arriba izquierda | «expresión asimétrico arriba izquierda» |
-| Mirada suave abajo | «expresión mirada suave abajo» |
+| Juguetón derecha | «juguetón derecha» |
+| Asimétrico arriba izquierda | «asimétrico arriba izquierda» |
+| Mirada suave abajo | «mirada suave abajo» |
 | Mirada amplia abajo izquierda | «expresión mirada amplia abajo izquierda» |
-| Adormilado | «expresión adormilado» |
-| Sospechoso derecha | «expresión sospechoso derecha» |
-| Tímido | «expresión tímido» |
-| Cejas enojadas | «expresión cejas enojadas» |
-| Inquieto izquierda | «expresión inquieto izquierda» |
+| Adormilado | «adormilado» |
+| Sospechoso derecha | «sospechoso derecha» |
+| Tímido | «tímido» |
+| Cejas enojadas | «cejas enojadas» |
+| Inquieto izquierda | «inquieto izquierda» |
 
 También se aceptan **«dormite»**, **«duerme»** y **«a dormir»**
 para la expresión dormida. Para contento, usar **«contento»**.
-El prefijo «expresión» también se puede usar con las cinco expresiones básicas.
+Los nombres se dicen directamente, como **«mirada lateral arriba»** o **«tímido»**.
+Solo las poses **Enojado izquierda** y **Mirada amplia abajo izquierda** llevan
+«expresión» para distinguirlas de un comando que combina otra expresión con mirada.
 
 ### Animaciones en bucle — 23
 
@@ -131,7 +133,6 @@ El prefijo «expresión» también se puede usar con las cinco expresiones bási
 | Jugar | «jugar» |
 | Celebrar | «celebrar» |
 
-También se acepta «animación» antes del nombre: **«animación celebrar»**.
 **«dormido»** elige una pose fija; **«dormir»** reproduce la
 animación de sueño.
 
@@ -162,9 +163,9 @@ los pasos de la animación y las selecciones siguientes. **«centro»**
 la centra; **«modo automático»** recupera las orientaciones originales.
 Los ojos dormidos siguen cerrados y también pueden orientarse.
 
-Los combinados requieren el firmware con **protocolo USB v4**. Para los nombres
-de expresiones que ya incluyen una dirección se usa «expresión» y «mirando»,
-como en la lista, para distinguir el nombre de la pose de la mirada solicitada.
+Los combinados requieren el firmware con **protocolo USB v4**. Si el nombre de
+la expresión ya incluye una dirección, agregar **«mirando»** para indicar la
+orientación deseada: **«mirada derecha mirando a la izquierda»**.
 
 <details>
 <summary>Lista completa: expresiones con mirada — 84 combinaciones</summary>
@@ -176,29 +177,29 @@ como en la lista, para distinguir el nombre de la pose de la mirada solicitada.
 | Sorprendido | «sorprendido izquierda»<br>«sorprendido centro»<br>«sorprendido derecha» |
 | Dormido | «dormido izquierda»<br>«dormido centro»<br>«dormido derecha» |
 | Enojado | «enojado izquierda»<br>«enojado centro»<br>«enojado derecha» |
-| Mirada lateral arriba | «expresión mirada lateral arriba mirando a la izquierda»<br>«expresión mirada lateral arriba mirando al centro»<br>«expresión mirada lateral arriba mirando a la derecha» |
-| Mirada abajo | «expresión mirada abajo mirando a la izquierda»<br>«expresión mirada abajo mirando al centro»<br>«expresión mirada abajo mirando a la derecha» |
-| Escéptico derecha | «expresión escéptico derecha mirando a la izquierda»<br>«expresión escéptico derecha mirando al centro»<br>«expresión escéptico derecha mirando a la derecha» |
-| Atento pequeño | «expresión atento pequeño mirando a la izquierda»<br>«expresión atento pequeño mirando al centro»<br>«expresión atento pequeño mirando a la derecha» |
-| Mirada amplia abajo | «expresión mirada amplia abajo mirando a la izquierda»<br>«expresión mirada amplia abajo mirando al centro»<br>«expresión mirada amplia abajo mirando a la derecha» |
-| Sorpresa izquierda | «expresión sorpresa izquierda mirando a la izquierda»<br>«expresión sorpresa izquierda mirando al centro»<br>«expresión sorpresa izquierda mirando a la derecha» |
-| Somnoliento | «expresión somnoliento mirando a la izquierda»<br>«expresión somnoliento mirando al centro»<br>«expresión somnoliento mirando a la derecha» |
-| Curioso izquierda | «expresión curioso izquierda mirando a la izquierda»<br>«expresión curioso izquierda mirando al centro»<br>«expresión curioso izquierda mirando a la derecha» |
-| Asimétrico abajo derecha | «expresión asimétrico abajo derecha mirando a la izquierda»<br>«expresión asimétrico abajo derecha mirando al centro»<br>«expresión asimétrico abajo derecha mirando a la derecha» |
-| Atento izquierda | «expresión atento izquierda mirando a la izquierda»<br>«expresión atento izquierda mirando al centro»<br>«expresión atento izquierda mirando a la derecha» |
-| Alegre abajo derecha | «expresión alegre abajo derecha mirando a la izquierda»<br>«expresión alegre abajo derecha mirando al centro»<br>«expresión alegre abajo derecha mirando a la derecha» |
-| Escéptico izquierda | «expresión escéptico izquierda mirando a la izquierda»<br>«expresión escéptico izquierda mirando al centro»<br>«expresión escéptico izquierda mirando a la derecha» |
-| Mirada derecha | «expresión mirada derecha mirando a la izquierda»<br>«expresión mirada derecha mirando al centro»<br>«expresión mirada derecha mirando a la derecha» |
-| Enojado izquierda | «expresión enojado izquierda mirando a la izquierda»<br>«expresión enojado izquierda mirando al centro»<br>«expresión enojado izquierda mirando a la derecha» |
-| Juguetón derecha | «expresión juguetón derecha mirando a la izquierda»<br>«expresión juguetón derecha mirando al centro»<br>«expresión juguetón derecha mirando a la derecha» |
-| Asimétrico arriba izquierda | «expresión asimétrico arriba izquierda mirando a la izquierda»<br>«expresión asimétrico arriba izquierda mirando al centro»<br>«expresión asimétrico arriba izquierda mirando a la derecha» |
-| Mirada suave abajo | «expresión mirada suave abajo mirando a la izquierda»<br>«expresión mirada suave abajo mirando al centro»<br>«expresión mirada suave abajo mirando a la derecha» |
-| Mirada amplia abajo izquierda | «expresión mirada amplia abajo izquierda mirando a la izquierda»<br>«expresión mirada amplia abajo izquierda mirando al centro»<br>«expresión mirada amplia abajo izquierda mirando a la derecha» |
-| Adormilado | «expresión adormilado mirando a la izquierda»<br>«expresión adormilado mirando al centro»<br>«expresión adormilado mirando a la derecha» |
-| Sospechoso derecha | «expresión sospechoso derecha mirando a la izquierda»<br>«expresión sospechoso derecha mirando al centro»<br>«expresión sospechoso derecha mirando a la derecha» |
-| Tímido | «expresión tímido mirando a la izquierda»<br>«expresión tímido mirando al centro»<br>«expresión tímido mirando a la derecha» |
-| Cejas enojadas | «expresión cejas enojadas mirando a la izquierda»<br>«expresión cejas enojadas mirando al centro»<br>«expresión cejas enojadas mirando a la derecha» |
-| Inquieto izquierda | «expresión inquieto izquierda mirando a la izquierda»<br>«expresión inquieto izquierda mirando al centro»<br>«expresión inquieto izquierda mirando a la derecha» |
+| Mirada lateral arriba | «mirada lateral arriba mirando a la izquierda»<br>«mirada lateral arriba mirando al centro»<br>«mirada lateral arriba mirando a la derecha» |
+| Mirada abajo | «mirada abajo mirando a la izquierda»<br>«mirada abajo mirando al centro»<br>«mirada abajo mirando a la derecha» |
+| Escéptico derecha | «escéptico derecha mirando a la izquierda»<br>«escéptico derecha mirando al centro»<br>«escéptico derecha mirando a la derecha» |
+| Atento pequeño | «atento pequeño mirando a la izquierda»<br>«atento pequeño mirando al centro»<br>«atento pequeño mirando a la derecha» |
+| Mirada amplia abajo | «mirada amplia abajo mirando a la izquierda»<br>«mirada amplia abajo mirando al centro»<br>«mirada amplia abajo mirando a la derecha» |
+| Sorpresa izquierda | «sorpresa izquierda mirando a la izquierda»<br>«sorpresa izquierda mirando al centro»<br>«sorpresa izquierda mirando a la derecha» |
+| Somnoliento | «somnoliento mirando a la izquierda»<br>«somnoliento mirando al centro»<br>«somnoliento mirando a la derecha» |
+| Curioso izquierda | «curioso izquierda mirando a la izquierda»<br>«curioso izquierda mirando al centro»<br>«curioso izquierda mirando a la derecha» |
+| Asimétrico abajo derecha | «asimétrico abajo derecha mirando a la izquierda»<br>«asimétrico abajo derecha mirando al centro»<br>«asimétrico abajo derecha mirando a la derecha» |
+| Atento izquierda | «atento izquierda mirando a la izquierda»<br>«atento izquierda mirando al centro»<br>«atento izquierda mirando a la derecha» |
+| Alegre abajo derecha | «alegre abajo derecha mirando a la izquierda»<br>«alegre abajo derecha mirando al centro»<br>«alegre abajo derecha mirando a la derecha» |
+| Escéptico izquierda | «escéptico izquierda mirando a la izquierda»<br>«escéptico izquierda mirando al centro»<br>«escéptico izquierda mirando a la derecha» |
+| Mirada derecha | «mirada derecha mirando a la izquierda»<br>«mirada derecha mirando al centro»<br>«mirada derecha mirando a la derecha» |
+| Enojado izquierda | «enojado izquierda mirando a la izquierda»<br>«enojado izquierda mirando al centro»<br>«enojado izquierda mirando a la derecha» |
+| Juguetón derecha | «juguetón derecha mirando a la izquierda»<br>«juguetón derecha mirando al centro»<br>«juguetón derecha mirando a la derecha» |
+| Asimétrico arriba izquierda | «asimétrico arriba izquierda mirando a la izquierda»<br>«asimétrico arriba izquierda mirando al centro»<br>«asimétrico arriba izquierda mirando a la derecha» |
+| Mirada suave abajo | «mirada suave abajo mirando a la izquierda»<br>«mirada suave abajo mirando al centro»<br>«mirada suave abajo mirando a la derecha» |
+| Mirada amplia abajo izquierda | «mirada amplia abajo izquierda mirando a la izquierda»<br>«mirada amplia abajo izquierda mirando al centro»<br>«mirada amplia abajo izquierda mirando a la derecha» |
+| Adormilado | «adormilado mirando a la izquierda»<br>«adormilado mirando al centro»<br>«adormilado mirando a la derecha» |
+| Sospechoso derecha | «sospechoso derecha mirando a la izquierda»<br>«sospechoso derecha mirando al centro»<br>«sospechoso derecha mirando a la derecha» |
+| Tímido | «tímido mirando a la izquierda»<br>«tímido mirando al centro»<br>«tímido mirando a la derecha» |
+| Cejas enojadas | «cejas enojadas mirando a la izquierda»<br>«cejas enojadas mirando al centro»<br>«cejas enojadas mirando a la derecha» |
+| Inquieto izquierda | «inquieto izquierda mirando a la izquierda»<br>«inquieto izquierda mirando al centro»<br>«inquieto izquierda mirando a la derecha» |
 
 </details>
 
