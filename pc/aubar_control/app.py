@@ -1,6 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, CancelledError
 import logging
-import time
 from pathlib import Path
 from queue import Empty, Queue
 import tkinter as tk
@@ -15,6 +14,7 @@ from .voice_commands import VoiceAction
 from .automatic_audio import AutomaticCapture
 from .speech import SpeechEngine, SpeechError, SpeechCancelled
 from .responses import confirmation_text
+from .playback_gate import PlaybackGate
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -45,8 +45,9 @@ class AubarApp:
         self.reply_provider = reply_provider
         self._pending_reply = None
         self._speech_response_token = None
-        self._speech_was_automatic = False
-        self._speech_resume_at = 0
+        self.playback_gate = PlaybackGate()
+        self._speech_playback_token = None
+        self._playback_was_blocked = False
         self.auto_enabled = tk.BooleanVar(value=False)
         self.auto_generation = 0
         self.auto_running = False
@@ -230,15 +231,15 @@ class AubarApp:
     def _speech_controls(self):
         active=self._speech_future is not None or self.speech.busy
         enabled=self.speech_enabled.get()
-        microphone_busy=self.auto_enabled.get() or self.audio_phase!='idle'
+        microphone_busy=self.audio_phase!='idle'
         self.speech_test_button.configure(state="normal" if enabled and not active and not microphone_busy else "disabled")
         self.speech_stop_button.configure(state="normal" if active and not self._speech_stop_requested else "disabled")
         self.speech_volume_scale.configure(state="normal" if enabled and not active else "disabled")
         self.speech_text.configure(state="normal" if enabled and not active else "disabled")
         if microphone_busy:
-            self.speech_hint.configure(text="Apagá la escucha automática o terminá la captura para probar la voz.")
+            self.speech_hint.configure(text="Terminá la captura o el reconocimiento para probar la voz.")
         else:
-            self.speech_hint.configure(text="La prueba usa la salida de audio predeterminada de Windows.")
+            self.speech_hint.configure(text="El micrófono se pausa al hablar Aubar y vuelve a escuchar si la escucha automática sigue activada.")
 
     def _speech_message(self, text, error=False):
         self.speech_message.set(text)
@@ -248,24 +249,28 @@ class AubarApp:
         if not self.closed:
             self.speak_text(self.speech_text.get("1.0","end-1c"),is_test=True)
 
-    def speak_text(self, text, *, is_test=False, allow_automatic=False):
+    def speak_text(self, text, *, is_test=False):
         if self.closed or not self.speech_enabled.get() or self._speech_future is not None or self.speech.busy:
             return False
-        if (self.auto_enabled.get() and not allow_automatic) or self.audio_phase!='idle':
-            self._speech_message("Apagá la escucha automática o terminá la captura antes de probar la voz.")
+        if self.audio_phase!='idle':
+            self._speech_message("Terminá la captura o el reconocimiento antes de probar la voz.")
             return False
-        self._speech_was_automatic=self.auto_enabled.get() and self.auto_running
-        if self._speech_was_automatic:
-            self.automatic_capture.pause()
+        self._speech_playback_token=self.playback_gate.begin()
+        self.automatic_capture.pause()
         try:
             self._speech_future=self.speech.speak(text,volume=round(self.speech_volume.get()))
         except SpeechError as error:
-            self._speech_was_automatic=False
+            self.playback_gate.finish(self._speech_playback_token)
+            self._speech_playback_token=None
             self._speech_message(str(error),error=True)
+            self._audio_controls()
             return False
         self._speech_is_test=is_test
         self._speech_stop_requested=False
-        self._speech_message("Hablando…" if is_test else "Hablando: "+text)
+        preview=' '.join(text.split())
+        if len(preview)>160:
+            preview=preview[:157]+'…'
+        self._speech_message("Hablando…" if is_test else "Hablando: "+preview)
         self._audio_controls()
         return True
 
@@ -311,10 +316,18 @@ class AubarApp:
                                  "Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
         self._speech_stop_requested=False
         self._speech_response_token=None
-        if self._speech_was_automatic:
-            self._speech_resume_at=time.monotonic()+.35
-        self._speech_was_automatic=False
+        self.playback_gate.finish(self._speech_playback_token)
+        self._speech_playback_token=None
         self._audio_controls()
+
+    def _microphone_blocked(self):
+        return self.playback_gate.blocked or self._speech_future is not None or self.speech.busy
+
+    def _refresh_playback_gate(self):
+        blocked=self._microphone_blocked()
+        if blocked!=self._playback_was_blocked:
+            self._playback_was_blocked=blocked
+            self._audio_controls()
 
     def _queue_confirmed_reply(self, action, token):
         if self.closed or not self.speech_enabled.get() or not self.connected or token!=self.connection_token:
@@ -338,7 +351,7 @@ class AubarApp:
         if self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy:
             return
         self._pending_reply=None
-        if self.speak_text(text,allow_automatic=True):
+        if self.speak_text(text):
             self._speech_response_token=token
             self._log('Aubar: '+text)
 
@@ -431,9 +444,9 @@ class AubarApp:
         self.mic_combo.configure(state="readonly" if idle else "disabled")
         self.mic_scan_button.configure(state="normal" if idle else "disabled")
         # Keep the button enabled during recording so it receives release events.
-        allowed = not self.speech.busy and not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
+        allowed = not self._microphone_blocked() and not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
         self.talk_button.configure(state="normal" if allowed else "disabled")
-        auto_allowed = self.auto_enabled.get() or (idle and not self.speech.busy and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
+        auto_allowed = self.auto_enabled.get() or (idle and not self._microphone_blocked() and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
         self.auto_check.configure(state="normal" if auto_allowed else "disabled")
         if hasattr(self, 'catalog_buttons'):
             for button in self.catalog_buttons:
@@ -460,7 +473,7 @@ class AubarApp:
         self._audio_submit("inputs", self.audio_provider)
 
     def start_recording(self, event=None):
-        if self.speech.busy or self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
+        if self._microphone_blocked() or self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
             return "break"
         device = self.inputs.get(self.mic_value.get())
         if device is None:
@@ -583,7 +596,7 @@ class AubarApp:
             self.stop_automatic()
             return
         device = self.inputs.get(self.mic_value.get())
-        if self.speech.busy or self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
+        if self._microphone_blocked() or self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
             self.auto_enabled.set(False)
             self._audio_controls()
             return
@@ -652,10 +665,11 @@ class AubarApp:
         if capture.finished.is_set() or not capture.requested.is_set():
             self.stop_automatic('El micrófono se desconectó. Revisá la entrada y activá la escucha de nuevo.')
             return
-        if self._speech_future is not None or self.speech.busy or self._pending_reply is not None or time.monotonic()<self._speech_resume_at:
+        if self._microphone_blocked() or self._pending_reply is not None:
             capture.pause()
             self.level_bar['value']=0
-            self.audio_message.set('Escucha en pausa mientras Aubar responde…')
+            self.audio_message.set('Escucha en pausa mientras Aubar habla…' if self.playback_gate.active or self.speech.busy else
+                                   'Esperando un instante antes de volver a escuchar…')
             return
         try:
             recording = capture.utterances.get_nowait()
@@ -850,6 +864,7 @@ class AubarApp:
         self._drain_audio()
         self._drain_speech()
         self._drain_reply()
+        self._refresh_playback_gate()
         self._tick_automatic()
         self._dispatch_voice()
         if not self.closed:

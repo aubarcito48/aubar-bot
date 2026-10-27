@@ -32,8 +32,9 @@ Desde la raíz del repositorio:
 
 La prueba predeterminada dice: **«Hola, soy Aubar. Esta es mi voz en español»**.
 No abre el micrófono ni necesita el ESP32. Apagar la escucha automática del
-panel durante estas pruebas: su coordinación con la reproducción se implementará
-en la tarea correspondiente del sprint.
+panel durante estas pruebas de terminal: el script es independiente del panel
+y no comparte su estado de micrófono. Las reproducciones iniciadas desde el
+panel sí utilizan la coordinación automática descrita abajo.
 
 Si no hay una voz española compatible con SAPI, la herramienta lo informa.
 Las voces disponibles para otros servicios de Windows pueden no estar expuestas
@@ -56,10 +57,11 @@ desde el panel. Al volver a marcarlo no se repite la frase anterior.
 El volumen se aplica a la próxima reproducción y no modifica el volumen
 global de Windows. El texto y el volumen se editan cuando no hay audio activo.
 
-Para esta prueba debe estar apagada la escucha automática y terminada cualquier
-captura manual. Mientras suena la voz no se puede iniciar una captura.
-La pausa y reanudación automática del micrófono se integran en la tarea de
-coordinación. El panel y las consultas USB siguen funcionando durante el audio.
+Se puede probar la voz con la escucha automática activada: el panel pausa el
+micrófono antes de comenzar a reproducir. Hay que terminar cualquier captura
+manual o reconocimiento en curso antes de iniciar una prueba.
+Mientras suena la voz y durante la espera posterior no se puede iniciar una
+captura manual. El panel y las consultas USB siguen funcionando durante el audio.
 
 Si la voz falla o falta una voz española, el estado muestra el error y permite
 reintentar; la conexión con el ESP32 se mantiene. Los ajustes de esta pestaña
@@ -92,12 +94,29 @@ conserva una respuesta todavía no iniciada: una confirmación más reciente la
 reemplaza. Desactivar la voz o desconectar descarta las respuestas pendientes;
 volver a activar o reconectar no reproduce una respuesta antigua.
 
-En escucha automática, las respuestas confirmadas usan una pausa básica del
-micrófono: descartan el audio pendiente, mantienen la detección detenida mientras
-habla Aubar y esperan 350 ms adicionales antes de volver a escuchar. Si se
-desactivó la escucha o se perdió el USB, no la reactivan. La prueba de texto de
-la pestaña **Voz** sigue requiriendo apagar la escucha automática; la coordinación
-general de esas reproducciones se completa en su tarea del sprint.
+## Coordinación entre voz y micrófono
+
+Las pruebas de la pestaña **Voz**, las respuestas confirmadas y cualquier texto
+entregado a `app.speak_text` usan la misma protección:
+
+- Pausan la detección antes de iniciar el motor de voz.
+- Descartan la frase parcial, el audio previo y cualquier captura pendiente.
+- Ignoran el audio recibido mientras habla Aubar, sin transcribirlo ni enviarlo
+  al ESP32.
+- Mantienen el micrófono protegido durante **350 ms** después del final, una
+  cancelación o un error de reproducción.
+- Solo reanudan la escucha automática si la casilla sigue activada y la conexión
+  USB y el micrófono continúan disponibles.
+
+Si se apaga el micrófono durante una reproducción, queda apagado al terminar.
+Una desconexión tampoco reactiva la escucha al reconectar. Cerrar el panel
+cancela la reproducción y la captura. Desactivar únicamente la voz permite
+recuperar la escucha, si esta sigue activada, después de la breve espera.
+
+La captura manual nunca se abre automáticamente: su botón vuelve a habilitarse
+cuando finaliza la protección. Si se interrumpe la calibración del ruido
+ambiente para hablar, se vuelve a calibrar antes de aceptar nuevas frases.
+El panel indica cuándo está en pausa y cuándo vuelve a estar listo para escuchar.
 
 ## API para el panel y la futura IA
 
@@ -130,7 +149,10 @@ future = engine.speak("Este texto puede venir de cualquier fuente.")
   reproducir pedidos antiguos.
 
 El panel usa `app.speak_text(text)` para respetar la activación de voz, el
-volumen y los estados de reproducción. `responses.confirmation_text(action)`
+volumen y la coordinación con el micrófono. Esta entrada se utiliza desde el
+hilo de Tk; las respuestas generadas por otro trabajador se entregan a ese hilo.
+Las llamadas directas al motor de bajo nivel no sustituyen esta entrada del panel.
+`responses.confirmation_text(action)`
 es la fuente inicial de respuestas predefinidas y no depende del motor de voz.
 La aplicación permite sustituirla mediante `reply_provider`; esa función debe
 ser rápida y local. Una futura integración de IA puede generar texto en su
@@ -143,7 +165,10 @@ del panel y USB, texto literal, ausencia de voz española, errores del ayudante,
 tiempo de espera y cierre de la aplicación. No reproducen audio real ni abren
 el micrófono. Las pruebas de `tests/pc/test_responses.py` también verifican las
 respuestas del catálogo, confirmación previa, silenciamiento, errores y pausa
-de escucha. La comprobación audible se realiza por separado.
+de escucha. `tests/pc/test_playback_gate.py` cubre la coordinación de pruebas
+y texto libre, descarte del audio propio, espera posterior, interrupciones,
+errores, apagado del micrófono, reconexión y recalibración.
+La comprobación audible se realiza por separado.
 
 Referencia del tratamiento de texto:
 [SpeechVoiceSpeakFlags de Microsoft SAPI](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125223(v=vs.85)).

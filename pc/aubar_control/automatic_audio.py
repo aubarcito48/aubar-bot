@@ -112,6 +112,8 @@ class AutomaticCapture(MicrophoneCapture):
     def pause(self):
         self.listening.clear()
         with self.lock:
+            if self.detector is not None and self.detector.calibration_left:
+                self.needs_calibration=True
             self.detector = None
             self.speaking = False
             self.level = 0
