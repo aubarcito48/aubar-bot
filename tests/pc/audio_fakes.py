@@ -51,3 +51,28 @@ class FakeRecognizer:
         if self.gate:
             self.gate.wait(2)
         return self.result
+
+
+class FakeSpeechEngine:
+    """Silent TTS for general UI tests; real SAPI is tested separately."""
+    def __init__(self):
+        self.calls=[]
+        self.closed=False
+
+    @property
+    def busy(self):
+        return False
+
+    def speak(self,text,*,volume=100,rate=0):
+        from concurrent.futures import Future
+        from pc.aubar_control.speech import SpeechVoice
+        self.calls.append((text,volume,rate))
+        future=Future()
+        future.set_result(SpeechVoice('test-es','Voz de prueba','es-MX'))
+        return future
+
+    def stop(self):
+        pass
+
+    def close(self):
+        self.closed=True

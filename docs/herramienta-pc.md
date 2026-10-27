@@ -243,9 +243,16 @@ la voz utilizada y los posibles errores sin bloquear el panel ni el USB.
 
 Desactivar la voz corta el audio actual; volver a activarla no repite la frase.
 Para probarla hay que apagar la escucha automática o terminar la captura manual.
-La [guía de voz local](voz-local.md) explica estos controles, sus requisitos y
-la API que se usará para las respuestas habladas. La coordinación automática
-con el micrófono se incorpora en la tarea correspondiente del sprint.
+Con la voz activada, Aubar responde después de confirmar la acción en el ESP32.
+Por ejemplo: «Aubar, enojado derecha» produce «Estoy enojado mirando a la derecha».
+Las selecciones del catálogo también tienen respuesta; las consultas de estado
+y las órdenes no confirmadas no la generan.
+
+Las respuestas en escucha automática pausan la detección mientras suena Aubar
+y la recuperan al terminar, siempre que siga activada. La prueba libre de voz
+mantiene su requisito de escucha apagada hasta completar la coordinación general.
+La [guía de voz local](voz-local.md) explica los controles, las respuestas y la
+API de texto independiente que podrá utilizar una futura IA.
 
 ## Modelo local
 

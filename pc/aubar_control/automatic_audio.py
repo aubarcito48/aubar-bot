@@ -116,6 +116,11 @@ class AutomaticCapture(MicrophoneCapture):
             self.speaking = False
             self.level = 0
             self.calibrating = False
+            while True:
+                try:
+                    self.utterances.get_nowait()
+                except Empty:
+                    break
 
     def cancel(self):
         super().cancel()

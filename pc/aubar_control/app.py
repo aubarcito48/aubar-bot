@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, CancelledError
 import logging
+import time
 from pathlib import Path
 from queue import Empty, Queue
 import tkinter as tk
@@ -13,6 +14,7 @@ from .catalog import EXPRESSIONS, ANIMATIONS
 from .voice_commands import VoiceAction
 from .automatic_audio import AutomaticCapture
 from .speech import SpeechEngine, SpeechError, SpeechCancelled
+from .responses import confirmation_text
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -22,7 +24,8 @@ PINK = "#ffc2e9"
 
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
-                 capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None):
+                 capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None,
+                 reply_provider=confirmation_text):
         self.root = root
         self.session = session or DeviceSession()
         self.port_provider = port_provider
@@ -39,6 +42,11 @@ class AubarApp:
         self._speech_future = None
         self._speech_stop_requested = False
         self._speech_is_test = False
+        self.reply_provider = reply_provider
+        self._pending_reply = None
+        self._speech_response_token = None
+        self._speech_was_automatic = False
+        self._speech_resume_at = 0
         self.auto_enabled = tk.BooleanVar(value=False)
         self.auto_generation = 0
         self.auto_running = False
@@ -240,24 +248,29 @@ class AubarApp:
         if not self.closed:
             self.speak_text(self.speech_text.get("1.0","end-1c"),is_test=True)
 
-    def speak_text(self, text, *, is_test=False):
+    def speak_text(self, text, *, is_test=False, allow_automatic=False):
         if self.closed or not self.speech_enabled.get() or self._speech_future is not None or self.speech.busy:
             return False
-        if self.auto_enabled.get() or self.audio_phase!='idle':
+        if (self.auto_enabled.get() and not allow_automatic) or self.audio_phase!='idle':
             self._speech_message("Apagá la escucha automática o terminá la captura antes de probar la voz.")
             return False
+        self._speech_was_automatic=self.auto_enabled.get() and self.auto_running
+        if self._speech_was_automatic:
+            self.automatic_capture.pause()
         try:
             self._speech_future=self.speech.speak(text,volume=round(self.speech_volume.get()))
         except SpeechError as error:
+            self._speech_was_automatic=False
             self._speech_message(str(error),error=True)
             return False
         self._speech_is_test=is_test
         self._speech_stop_requested=False
-        self._speech_message("Hablando…")
+        self._speech_message("Hablando…" if is_test else "Hablando: "+text)
         self._audio_controls()
         return True
 
     def stop_speech(self):
+        self._pending_reply=None
         if self.closed or not self.speech.busy and self._speech_future is None:
             return
         self._speech_stop_requested=True
@@ -267,6 +280,7 @@ class AubarApp:
 
     def toggle_speech(self):
         if not self.speech_enabled.get():
+            self._pending_reply=None
             self.stop_speech()
             if self._speech_future is None and not self.speech.busy:
                 self._speech_message("Voz desactivada.")
@@ -296,7 +310,37 @@ class AubarApp:
             self._speech_message(("Prueba de voz finalizada." if self._speech_is_test else "Reproducción finalizada.") if not self._speech_stop_requested else
                                  "Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
         self._speech_stop_requested=False
+        self._speech_response_token=None
+        if self._speech_was_automatic:
+            self._speech_resume_at=time.monotonic()+.35
+        self._speech_was_automatic=False
         self._audio_controls()
+
+    def _queue_confirmed_reply(self, action, token):
+        if self.closed or not self.speech_enabled.get() or not self.connected or token!=self.connection_token:
+            return
+        try:
+            text=self.reply_provider(action)
+        except Exception:
+            logging.exception("Could not build confirmed speech response")
+            self._speech_message("La acción se confirmó, pero no se pudo preparar su respuesta hablada.",error=True)
+            return
+        if isinstance(text,str) and text.strip():
+            self._pending_reply=(token,text)
+
+    def _drain_reply(self):
+        if self._pending_reply is None:
+            return
+        token,text=self._pending_reply
+        if self.closed or not self.speech_enabled.get() or not self.connected or token!=self.connection_token:
+            self._pending_reply=None
+            return
+        if self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy:
+            return
+        self._pending_reply=None
+        if self.speak_text(text,allow_automatic=True):
+            self._speech_response_token=token
+            self._log('Aubar: '+text)
 
     def _build_catalog(self, panel):
         panel.columnconfigure(0, weight=1)
@@ -328,7 +372,7 @@ class AubarApp:
                   style="Muted.TLabel", wraplength=650).grid(row=10, column=0, columnspan=2, sticky="w", pady=(20, 0))
 
     def apply_catalog(self, kind):
-        if self.closed or self.busy or not self.connected or self.audio_phase!='idle':
+        if self.closed or self.busy or self.speech.busy or self._pending_reply is not None or not self.connected or self.audio_phase!='idle':
             return
         if kind=='MODE':
             action=VoiceAction('MODE', 'auto', 'Todas las animaciones')
@@ -393,7 +437,7 @@ class AubarApp:
         self.auto_check.configure(state="normal" if auto_allowed else "disabled")
         if hasattr(self, 'catalog_buttons'):
             for button in self.catalog_buttons:
-                button.configure(state="normal" if self.connected and not self.busy and self.audio_phase=="idle" else "disabled")
+                button.configure(state="normal" if self.connected and not self.busy and not self.speech.busy and self._pending_reply is None and self.audio_phase=="idle" else "disabled")
         self._speech_controls()
 
     def _audio_submit(self, operation, action):
@@ -608,6 +652,11 @@ class AubarApp:
         if capture.finished.is_set() or not capture.requested.is_set():
             self.stop_automatic('El micrófono se desconectó. Revisá la entrada y activá la escucha de nuevo.')
             return
+        if self._speech_future is not None or self.speech.busy or self._pending_reply is not None or time.monotonic()<self._speech_resume_at:
+            capture.pause()
+            self.level_bar['value']=0
+            self.audio_message.set('Escucha en pausa mientras Aubar responde…')
+            return
         try:
             recording = capture.utterances.get_nowait()
         except Empty:
@@ -648,7 +697,7 @@ class AubarApp:
         enable(self.scan_button, not self.busy and not self.connected)
         self.port_combo.configure(state="readonly" if not self.busy and not self.connected else "disabled")
         for button in self.catalog_buttons:
-            enable(button, self.connected and not self.busy and self.audio_phase=="idle")
+            enable(button, self.connected and not self.busy and not self.speech.busy and self._pending_reply is None and self.audio_phase=="idle")
         self._audio_controls()
 
     def _message(self, text, error=False):
@@ -697,6 +746,9 @@ class AubarApp:
 
     def _invalidate_connection(self):
         self.connection_token += 1
+        self._pending_reply=None
+        if self._speech_response_token is not None:
+            self.stop_speech()
         if self.pending_action is not None or self.audio_phase == 'sending':
             self.recognition_message.set('Orden descartada por desconexión. Reconectá y repetí la frase.')
             self.audio_phase = 'idle'
@@ -771,7 +823,8 @@ class AubarApp:
                         self._log("Estado del dispositivo actualizado.")
                 elif operation in ('voice', 'catalog'):
                     token, action, status = result
-                    if token == self.connection_token and self.connected:
+                    confirmed=token == self.connection_token and self.connected
+                    if confirmed:
                         self._apply_status(status)
                         if operation=='catalog':
                             self.catalog_message.set(f'{action.label}. Confirmado por el ESP32.')
@@ -782,6 +835,8 @@ class AubarApp:
                         if self.audio_phase=='sending':
                             self.audio_phase = 'idle'
                         self.talk_button.configure(text='Mantené pulsado para hablar')
+                    if confirmed:
+                        self._queue_confirmed_reply(action,token)
                     self._audio_controls()
                 elif operation == "disconnect":
                     self.connected = False
@@ -794,6 +849,7 @@ class AubarApp:
             pass
         self._drain_audio()
         self._drain_speech()
+        self._drain_reply()
         self._tick_automatic()
         self._dispatch_voice()
         if not self.closed:
@@ -809,6 +865,7 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self._pending_reply=None
         self.speech.close()
         self.auto_enabled.set(False)
         self.auto_generation += 1

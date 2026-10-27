@@ -65,6 +65,40 @@ Si la voz falla o falta una voz española, el estado muestra el error y permite
 reintentar; la conexión con el ESP32 se mantiene. Los ajustes de esta pestaña
 se conservan durante la sesión del panel.
 
+## Respuestas a acciones confirmadas
+
+Con **Activar voz** marcado, el panel responde después de recibir la
+confirmación del ESP32 y consultar su estado. Funciona con comandos de voz
+manuales, escucha automática y selecciones desde **Catálogo**.
+
+| Acción confirmada | Ejemplo de respuesta |
+| --- | --- |
+| Contento | «Estoy contento». |
+| Enojado + derecha | «Estoy enojado mirando a la derecha». |
+| Celebrar + izquierda | «Voy a celebrar mirando a la izquierda». |
+| Mirada al centro | «Miro al centro». |
+| Modo automático | «Activo el modo automático». |
+
+Las 28 expresiones, las 23 animaciones y las 153 combinaciones tienen texto
+de respuesta. Las expresiones menos habituales se anuncian por su nombre de
+catálogo. Las frases desconocidas, consultas de estado y conexiones no generan
+respuestas. Si falta la confirmación USB, no se anuncia la acción como realizada.
+Si falla la voz después de confirmar una acción, el avatar conserva la acción
+y el panel informa el error sin volver a enviar la orden.
+
+Durante una respuesta se deshabilitan nuevas selecciones del catálogo; se puede
+detener o desactivar la voz y siguen disponibles las consultas USB. Solo se
+conserva una respuesta todavía no iniciada: una confirmación más reciente la
+reemplaza. Desactivar la voz o desconectar descarta las respuestas pendientes;
+volver a activar o reconectar no reproduce una respuesta antigua.
+
+En escucha automática, las respuestas confirmadas usan una pausa básica del
+micrófono: descartan el audio pendiente, mantienen la detección detenida mientras
+habla Aubar y esperan 350 ms adicionales antes de volver a escuchar. Si se
+desactivó la escucha o se perdió el USB, no la reactivan. La prueba de texto de
+la pestaña **Voz** sigue requiriendo apagar la escucha automática; la coordinación
+general de esas reproducciones se completa en su tarea del sprint.
+
 ## API para el panel y la futura IA
 
 `SpeechEngine.speak(text)` devuelve un `Future` inmediatamente. La conversión y
@@ -96,15 +130,20 @@ future = engine.speak("Este texto puede venir de cualquier fuente.")
   reproducir pedidos antiguos.
 
 El panel usa `app.speak_text(text)` para respetar la activación de voz, el
-volumen y los estados de reproducción. Las respuestas tras confirmar comandos
-y la coordinación automática con el micrófono se conectan en las siguientes tareas.
+volumen y los estados de reproducción. `responses.confirmation_text(action)`
+es la fuente inicial de respuestas predefinidas y no depende del motor de voz.
+La aplicación permite sustituirla mediante `reply_provider`; esa función debe
+ser rápida y local. Una futura integración de IA puede generar texto en su
+propio trabajador y entregarlo a la misma salida de voz desde la interfaz.
 
 ## Validación
 
 Las pruebas de `tests/pc/test_speech.py` cubren ejecución asíncrona, continuidad
 del panel y USB, texto literal, ausencia de voz española, errores del ayudante,
 tiempo de espera y cierre de la aplicación. No reproducen audio real ni abren
-el micrófono. La comprobación audible se hace por separado con el script anterior.
+el micrófono. Las pruebas de `tests/pc/test_responses.py` también verifican las
+respuestas del catálogo, confirmación previa, silenciamiento, errores y pausa
+de escucha. La comprobación audible se realiza por separado.
 
 Referencia del tratamiento de texto:
 [SpeechVoiceSpeakFlags de Microsoft SAPI](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125223(v=vs.85)).
