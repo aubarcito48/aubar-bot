@@ -18,6 +18,7 @@ from .playback_gate import PlaybackGate
 from .reply_queue import ReplyQueue
 from .config import load_groq_config
 from .groq_client import GroqService, GroqError, TEST_QUERY
+from .conversation import Conversation
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -32,6 +33,9 @@ class AubarApp:
         self.root = root
         self.config_loader=config_loader
         self.ai_service=ai_service or GroqService()
+        self.conversation=Conversation()
+        self.ai_input=tk.StringVar()
+        self._ai_conversation_request=None
         self._ai_future=None
         self.ai_generation=0
         self._ai_request_generation=None
@@ -198,12 +202,15 @@ class AubarApp:
 
     def reload_groq_configuration(self):
         self.ai_generation+=1
+        self.conversation.reset()
+        self._ai_conversation_request=None
         state=self.config_loader()
         self.groq_config=state.config
         self.groq_config_message.set(state.message)
         if hasattr(self,'ai_response'):
             self._show_ai_response('')
-            self.ai_message.set('Configuración recargada. Iniciá una nueva prueba cuando esté disponible.')
+            self.ai_input.set('')
+            self.ai_message.set('Configuración recargada y conversación reiniciada.')
             self._ai_controls()
 
     def _build_ai_configuration(self,panel):
@@ -218,11 +225,19 @@ class AubarApp:
         ttk.Button(buttons,text="Recargar configuración",command=self.reload_groq_configuration).pack(side="left",padx=(0,10))
         self.ai_test_button=ttk.Button(buttons,text="Probar conexión",style="Primary.TButton",command=self.test_groq)
         self.ai_test_button.pack(side="left")
+        ttk.Button(buttons,text="Nueva conversación",command=self.new_conversation).pack(side="left",padx=(10,0))
         ttk.Label(panel,text="Guardá tu clave en GROQ_API_KEY dentro de .env y recargá. "
             "La clave no se muestra en el panel.",style="Muted.TLabel",wraplength=600).grid(
             row=3,column=0,sticky="ew",pady=(0,12))
-        ttk.Label(panel,text="Respuesta de prueba",style="Section.TLabel").grid(
-            row=4,column=0,sticky="w",pady=(0,6))
+        question=ttk.Frame(panel)
+        question.grid(row=4,column=0,sticky="ew",pady=(0,8))
+        question.columnconfigure(1,weight=1)
+        ttk.Label(question,text="Mensaje").grid(row=0,column=0,padx=(0,8))
+        self.ai_entry=ttk.Entry(question,textvariable=self.ai_input,font=("Segoe UI",11))
+        self.ai_entry.grid(row=0,column=1,sticky="ew",padx=(0,8))
+        self.ai_entry.bind('<Return>',lambda event:self.send_ai_message())
+        self.ai_send_button=ttk.Button(question,text="Enviar",command=self.send_ai_message)
+        self.ai_send_button.grid(row=0,column=2)
         response_frame=ttk.Frame(panel)
         response_frame.grid(row=5,column=0,sticky="nsew")
         response_frame.rowconfigure(0,weight=1);response_frame.columnconfigure(0,weight=1)
@@ -235,25 +250,59 @@ class AubarApp:
         panel.rowconfigure(5,weight=1)
         ttk.Label(panel,textvariable=self.ai_message,wraplength=600).grid(
             row=6,column=0,sticky="ew",pady=(10,6))
-        ttk.Label(panel,text="La prueba envía una pregunta breve por internet y muestra la respuesta como texto. "
-            "Podés usarla sin conectar la placa.",style="Muted.TLabel",wraplength=600).grid(
+        ttk.Label(panel,text="Conversación por texto con contexto durante esta sesión. "
+            "«Nueva conversación» borra lo recordado. Funciona sin conectar la placa.",style="Muted.TLabel",wraplength=600).grid(
             row=7,column=0,sticky="ew")
         self._ai_controls()
 
     def _ai_controls(self):
         active=self._ai_future is not None or self.ai_service.busy
         self.ai_test_button.configure(state="normal" if self.groq_config is not None and not active else "disabled")
+        self.ai_send_button.configure(state="normal" if self.groq_config is not None and not active else "disabled")
+        self.ai_entry.configure(state="disabled" if active else "normal")
+
+    def new_conversation(self):
+        self.ai_generation+=1
+        self.conversation.reset()
+        self._ai_conversation_request=None
+        self.ai_input.set('')
+        self._show_ai_response('')
+        self.ai_message.set('Conversación reiniciada. La consulta anterior se descartará.' if self._ai_future is not None
+                            else 'Conversación nueva. Aubar no conserva el contexto anterior.')
+        self._ai_controls()
+
+    def send_ai_message(self):
+        if self.closed or self.groq_config is None or self._ai_future is not None or self.ai_service.busy:
+            return
+        text=self.ai_input.get().replace(self.groq_config.api_key,'[credencial oculta]')
+        try:
+            request=self.conversation.prepare(text)
+        except ValueError as error:
+            self.ai_message.set(str(error))
+            return
+        self._ai_request_generation=self.ai_generation
+        self._ai_conversation_request=request
+        try:
+            self._ai_future=self.ai_service.submit(self.groq_config,request)
+        except GroqError as error:
+            self._ai_conversation_request=None
+            self.ai_message.set(str(error))
+        else:
+            self.ai_message.set('Aubar está preparando una respuesta…')
+        self._ai_controls()
 
     def _show_ai_response(self,text):
         self.ai_response.configure(state='normal')
         self.ai_response.delete('1.0','end')
         self.ai_response.insert('1.0',text)
         self.ai_response.configure(state='disabled')
+        self.ai_response.see('end')
 
     def test_groq(self):
         if self.closed or self.groq_config is None or self._ai_future is not None or self.ai_service.busy:
             return
-        self._show_ai_response('')
+        self._show_ai_response(self.conversation.transcript)
+        self._ai_conversation_request=None
         self._ai_request_generation=self.ai_generation
         try:
             self._ai_future=self.ai_service.submit(self.groq_config,TEST_QUERY)
@@ -268,6 +317,8 @@ class AubarApp:
         if future is None or not future.done():
             return
         self._ai_future=None
+        request=self._ai_conversation_request
+        self._ai_conversation_request=None
         stale=self._ai_request_generation!=self.ai_generation
         try:
             text=future.result()
@@ -279,9 +330,18 @@ class AubarApp:
                 self.ai_message.set('No se pudo completar la prueba de Groq. Podés intentar nuevamente.')
         else:
             if not stale:
-                self._show_ai_response(text)
+                if request is not None:
+                    if not self.conversation.commit(request,text):
+                        self._ai_controls()
+                        return
+                    self._show_ai_response(self.conversation.transcript)
+                    self.ai_input.set('')
+                    self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
+                else:
+                    transcript=self.conversation.transcript
+                    self._show_ai_response(transcript+'\n\nPrueba de conexión: '+text if transcript else text)
+                    self.ai_message.set('Conexión comprobada: Groq respondió usando el modelo configurado.')
                 self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
-                self.ai_message.set('Conexión comprobada: Groq respondió usando el modelo configurado.')
         self._ai_controls()
 
     def _build_speech(self, panel):
@@ -1023,6 +1083,8 @@ class AubarApp:
         self.closed = True
         self.recognized_query=None
         self.ai_generation+=1
+        self.conversation.reset()
+        self._ai_conversation_request=None
         self._ai_future=None
         self.ai_service.close()
         self.replies.cancel()

@@ -296,6 +296,13 @@ espera. **Probar conexión** envía una pregunta breve y muestra la respuesta
 como texto, sin bloquear los controles locales. Abrir o recargar la
 configuración no envía consultas al servicio.
 
+El campo **Mensaje** permite conversar por texto con Aubar y mantener preguntas
+de seguimiento. **Nueva conversación** borra el contexto de la sesión y
+descarta respuestas anteriores pendientes. Se conservan como máximo seis
+intercambios y 12 000 caracteres de historial; la [guía de Groq](groq.md#personalidad-y-conversación-por-texto)
+detalla la personalidad, los límites y los reinicios. Las consultas reconocidas
+por micrófono todavía no se envían automáticamente a la IA.
+
 ## Motor de salida de voz
 
 El panel utiliza **Dora**, voz femenina española de Kokoro, que funciona en la

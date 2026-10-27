@@ -5,6 +5,7 @@ import json
 import socket
 from threading import Lock
 import time
+from .conversation import ConversationRequest, Message, SYSTEM_PROMPT
 
 HOST='api.groq.com'
 ENDPOINT='/openai/v1/chat/completions'
@@ -37,14 +38,16 @@ class GroqClient:
         self.connection_factory=connection_factory
 
     def complete(self,config,text):
-        if not isinstance(text,str) or not text.strip() or len(text)>1000:
-            raise GroqError('La consulta debe contener entre 1 y 1000 caracteres.')
+        if isinstance(text,ConversationRequest):
+            messages=text.messages
+        else:
+            if not isinstance(text,str) or not text.strip() or len(text)>1000:
+                raise GroqError('La consulta debe contener entre 1 y 1000 caracteres.')
+            messages=(Message('system',SYSTEM_PROMPT),Message('user',text))
         payload={
             'model':config.model,
-            'messages':[
-                {'role':'system','content':'Respondé en español, de forma breve y clara.'},
-                {'role':'user','content':text},
-            ],
+            'messages':[{'role':message.role,'content':message.content.replace(config.api_key,'[credencial oculta]')}
+                        for message in messages],
             'max_completion_tokens':512,
             'stream':False,
         }

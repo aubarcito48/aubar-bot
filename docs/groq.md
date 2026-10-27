@@ -60,8 +60,45 @@ En la pestaña **IA**, pulsar **Probar conexión** con la configuración lista.
 La prueba envía «Respondé en una frase breve: ¿estás lista para conversar?»
 al modelo configurado, usando internet. La respuesta aparece como texto y
 se informa si Groq respondió correctamente. Funciona sin conectar el ESP32.
-Los comandos de voz, Dora y el control USB siguen disponibles; esta prueba
-todavía no incorpora conversación por micrófono, historial ni voz de la IA.
+Los comandos de voz, Dora y el control USB siguen disponibles. Esta prueba es
+independiente de la conversación: no agrega sus mensajes al historial.
+
+## Personalidad y conversación por texto
+
+En **IA**, escribir un mensaje y pulsar **Enviar** o Enter. Aubar responde
+como una asistente cercana, curiosa y respetuosa, en español con voseo y con
+preferencia por frases breves adecuadas para escucharse. Las instrucciones
+también le indican reconocer cuando falta información y no inventar recuerdos,
+acciones realizadas ni acceso a sensores. Son instrucciones al modelo; no
+constituyen una garantía de exactitud de cada respuesta.
+
+La conversación aparece como **Vos / Aubar** y admite preguntas de seguimiento.
+Por ejemplo, escribir «Mi color preferido es violeta» y después «¿Cuál es mi
+color preferido?». El campo admite hasta 1000 caracteres; una respuesta tiene
+como máximo 2000. La entrada se conserva si la consulta falla para poder
+corregirla o reintentar manualmente.
+
+Se conservan hasta **seis intercambios completos** y **12 000 caracteres de
+historial**, sumando preguntas y respuestas. Al superar cualquiera de esos
+límites se retiran los pares más antiguos. Cada consulta envía a Groq las
+instrucciones de personalidad, ese contexto limitado y el mensaje actual.
+El texto de conversación no se escribe en archivos, en Git ni en registros
+de actividad del panel.
+
+El historial solo incorpora un par pregunta/respuesta después de una respuesta
+válida y exitosa. Los errores y resultados descartados no agregan turnos.
+**Nueva conversación** borra el contexto y la vista, e invalida cualquier
+respuesta pendiente. Si una solicitud ya estaba en curso, su operación de red
+puede terminar en el trabajador; su resultado no reaparece ni se incorpora al
+nuevo historial. Se podrá enviar otro mensaje cuando finalice esa operación.
+
+Recargar la configuración y cerrar el panel también reinician el contexto.
+No se recuperan conversaciones de una sesión anterior. **Probar conexión**
+mantiene su función de diagnóstico y no cambia lo que recuerda Aubar.
+
+Esta etapa permite conversar **por texto**. Las consultas del micrófono siguen
+identificándose localmente; su conexión con Groq y la reproducción de las
+respuestas con Dora corresponden a la integración siguiente.
 
 El micrófono ya puede **identificar consultas abiertas** después de «Aubar»,
 como «Aubar, cómo estás». Se muestran localmente como **Consulta reconocida**;
@@ -137,6 +174,19 @@ Validación del cliente del 27 de octubre de 2026: **139 pruebas aprobadas**,
 local. Se comprobó el funcionamiento de Tk y COM3 y que los controles de IA
 entran en la ventana mínima de 760 × 650. El usuario confirmó la respuesta de
 Groq y la continuidad del panel durante la consulta.
+
+`tests/pc/test_conversation.py` cubre la construcción del contexto, los límites
+por pares y caracteres, el reinicio durante una consulta, respuestas tardías
+o duplicadas, errores y reintentos sin turnos fallidos, y la separación de la
+prueba de conexión. También comprueba que las credenciales configuradas se
+oculten en todo el cuerpo enviado a Groq.
+
+La conversación pasó **161 pruebas** y una comprobación real con Groq:
+retuvo un dato sintético en una pregunta de seguimiento y dejó de conocerlo
+después de reiniciar. Los controles se comprobaron en una ventana de 760 × 650.
+El usuario confirmó la conversación por texto, el recuerdo de un dato en una
+pregunta de seguimiento, el borrado mediante **Nueva conversación** y la
+visualización completa de los controles.
 
 Referencias: [configurar la clave en Groq](https://console.groq.com/docs/quickstart),
 [modelos disponibles](https://console.groq.com/docs/models) y
