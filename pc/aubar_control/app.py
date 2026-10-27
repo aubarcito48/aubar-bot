@@ -7,6 +7,7 @@ from tkinter import ttk
 
 from .protocol import DeviceError
 from .session import DeviceSession, available_ports
+from .audio import AudioError, MicrophoneCapture, available_inputs
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -15,12 +16,24 @@ PINK = "#ffc2e9"
 
 
 class AubarApp:
-    def __init__(self, root, session=None, port_provider=available_ports):
+    def __init__(self, root, session=None, port_provider=available_ports,
+                 capture=None, audio_provider=available_inputs):
         self.root = root
         self.session = session or DeviceSession()
         self.port_provider = port_provider
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-usb")
         self.events = Queue()
+        self.capture = capture or MicrophoneCapture()
+        self.audio_provider = audio_provider
+        self.audio_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-mic")
+        self.audio_events = Queue()
+        self.audio_phase = "idle"
+        self.audio_scan_busy = False
+        self.audio_failed = False
+        self.inputs = {}
+        self.last_recording = None
+        self.mic_value = tk.StringVar()
+        self.audio_message = tk.StringVar(value="Buscando micrófonos…")
         self.connected = False
         self.busy = False
         self.closed = False
@@ -34,9 +47,10 @@ class AubarApp:
         self._events_timer = root.after(80, self._drain)
         self._poll_timer = root.after(1500, self._poll)
         self.refresh_ports()
+        self.refresh_microphones()
 
     def _build(self):
-        self.root.title("Aubar Bot — Conexión")
+        self.root.title("Aubar Bot — Panel")
         height = max(650, min(740, self.root.winfo_screenheight()-120))
         self.root.geometry(f"820x{height}")
         self.root.minsize(760, 650)
@@ -58,12 +72,12 @@ class AubarApp:
         main = ttk.Frame(self.root, padding=30)
         main.pack(fill="both", expand=True)
         main.columnconfigure(0, weight=1)
-        main.rowconfigure(7, weight=1)
+        main.rowconfigure(1, weight=1)
         header = ttk.Frame(main)
         header.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         header.columnconfigure(0, weight=1)
         ttk.Label(header, text="Aubar Bot", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Panel de conexión", style="Muted.TLabel").grid(row=1, column=0, sticky="w")
+        ttk.Label(header, text="Tu compañero de escritorio", style="Muted.TLabel").grid(row=1, column=0, sticky="w")
         icon = tk.Canvas(header, width=120, height=78, bg=BG, highlightthickness=0)
         icon.grid(row=0, column=1, rowspan=2, padx=(20, 0))
         icon.create_oval(10, 37, 48, 68, fill=PINK, outline=PINK)
@@ -71,6 +85,17 @@ class AubarApp:
         icon.create_oval(27, 3, 98, 75, fill=PINK, outline=PINK)
         for x in (54, 72):
             icon.create_line(x, 36, x, 51, fill=INK, width=6, capstyle=tk.ROUND)
+
+        notebook = ttk.Notebook(main)
+        notebook.grid(row=1, column=0, sticky="nsew")
+        device_tab = ttk.Frame(notebook, padding=16)
+        microphone_tab = ttk.Frame(notebook, padding=20)
+        notebook.add(device_tab, text="Dispositivo")
+        notebook.add(microphone_tab, text="Micrófono")
+        self._build_microphone(microphone_tab)
+        main = device_tab
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(7, weight=1)
 
         connection = ttk.Frame(main)
         connection.grid(row=1, column=0, sticky="ew")
@@ -108,6 +133,146 @@ class AubarApp:
         self.activity.grid(row=7, column=0, sticky="nsew")
         ttk.Label(main, text="Cerrá el monitor serie de Arduino antes de conectar.", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=(12, 0))
         self._controls()
+
+    def _build_microphone(self, panel):
+        panel.columnconfigure(0, weight=1)
+        ttk.Label(panel, text="Elegí tu micrófono", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 12))
+        self.mic_combo = ttk.Combobox(panel, textvariable=self.mic_value, state="readonly")
+        self.mic_combo.grid(row=1, column=0, sticky="ew", padx=(0, 10))
+        self.mic_combo.bind("<<ComboboxSelected>>", lambda _: self._audio_controls())
+        self.mic_scan_button = ttk.Button(panel, text="Buscar micrófonos", command=self.refresh_microphones)
+        self.mic_scan_button.grid(row=1, column=1)
+        ttk.Label(panel, text="Mantené el botón pulsado mientras hablás. Soltalo para terminar.",
+                  wraplength=650).grid(row=2, column=0, columnspan=2, sticky="w", pady=(26, 14))
+        self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",
+                                     activebackground="#f2aedc", font=("Segoe UI", 15, "bold"),
+                                     relief="flat", padx=20, pady=24, takefocus=True)
+        self.talk_button.grid(row=3, column=0, columnspan=2, sticky="ew")
+        self.talk_button.bind("<ButtonPress-1>", self.start_recording)
+        self.talk_button.bind("<KeyPress-space>", self.start_recording)
+        self.root.bind("<ButtonRelease-1>", self.stop_recording, add="+")
+        self.root.bind("<KeyRelease-space>", self.stop_recording, add="+")
+        self.root.bind("<FocusOut>", self._focus_out, add="+")
+        self.root.bind("<Unmap>", lambda e: self.stop_recording() if e.widget is self.root else None, add="+")
+        self.audio_label = tk.Label(panel, textvariable=self.audio_message, bg=BG, fg=INK,
+                                    font=("Segoe UI", 11), anchor="w", wraplength=650, pady=14)
+        self.audio_label.grid(row=4, column=0, columnspan=2, sticky="ew")
+        self.level_bar = ttk.Progressbar(panel, maximum=100, mode="determinate")
+        self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 20))
+        ttk.Label(panel, text="La captura se detiene a los 10 segundos o al salir de la ventana.\n"
+                  "El audio queda solo en memoria; todavía no se interpreta ni se envía al ESP32.",
+                  style="Muted.TLabel", wraplength=650).grid(row=6, column=0, columnspan=2, sticky="w")
+        self._audio_controls()
+
+    def _audio_controls(self):
+        idle = self.audio_phase == "idle" and not self.audio_scan_busy
+        self.mic_combo.configure(state="readonly" if idle else "disabled")
+        self.mic_scan_button.configure(state="normal" if idle else "disabled")
+        # Keep the button enabled during recording so it receives release events.
+        allowed = not self.audio_scan_busy and self.mic_value.get() in self.inputs
+        self.talk_button.configure(state="normal" if allowed else "disabled")
+
+    def _audio_submit(self, operation, action):
+        def run():
+            try:
+                self.audio_events.put((operation, action(), None))
+            except Exception as error:
+                if not isinstance(error, AudioError):
+                    logging.exception("Audio operation failed: %s", operation)
+                    error = AudioError("No se pudo completar la captura. Revisá el micrófono.")
+                self.capture.cancel()
+                self.audio_events.put((operation, None, error))
+        self.audio_executor.submit(run)
+
+    def refresh_microphones(self):
+        if self.audio_phase != "idle" or self.audio_scan_busy or self.closed:
+            return
+        self.audio_scan_busy = True
+        self._audio_controls()
+        self._audio_submit("inputs", self.audio_provider)
+
+    def start_recording(self, event=None):
+        if self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
+            return "break"
+        device = self.inputs.get(self.mic_value.get())
+        if device is None:
+            return "break"
+        self.talk_button.focus_set()
+        self.last_recording = None
+        self.capture.arm()
+        self.audio_failed = False
+        self.audio_phase = "starting"
+        self.audio_message.set("Abriendo micrófono… Soltá el botón para cancelar.")
+        self.talk_button.configure(text="Soltá para terminar")
+        self._audio_controls()
+        self._audio_submit("start", lambda: self.capture.start(device.index))
+        return "break"
+
+    def stop_recording(self, event=None):
+        if self.closed or self.audio_phase not in ("starting", "recording"):
+            return
+        self.capture.cancel()
+        self.audio_phase = "stopping"
+        self.audio_message.set("Cerrando micrófono…")
+        self._audio_controls()
+        self._audio_submit("stop", self.capture.finish)
+
+    def _focus_out(self, event):
+        def check_focus():
+            if not self.closed and self.root.focus_displayof() is None:
+                self.stop_recording()
+        self.root.after_idle(check_focus)
+
+    def _drain_audio(self):
+        try:
+            while True:
+                operation, result, error = self.audio_events.get_nowait()
+                if error:
+                    self.audio_failed = True
+                    self.audio_phase = "idle"
+                    self.audio_scan_busy = False
+                    self.last_recording = None
+                    self.audio_message.set(str(error))
+                    self._log(str(error))
+                elif operation == "inputs":
+                    self.audio_scan_busy = False
+                    previous = self.mic_value.get()
+                    self.inputs = {device.label: device for device in result}
+                    self.mic_combo.configure(values=list(self.inputs))
+                    default = next((device.label for device in result if device.is_default), next(iter(self.inputs), ""))
+                    self.mic_value.set(previous if previous in self.inputs else default)
+                    self.audio_message.set("Micrófono apagado. Listo para capturar." if result else "No hay micrófonos. Conectá uno y buscá de nuevo.")
+                elif operation == "start" and self.audio_phase == "starting":
+                    if result and self.capture.requested.is_set():
+                        self.audio_phase = "recording"
+                    else:
+                        self.stop_recording()
+                elif operation == "stop":
+                    self.audio_phase = "idle"
+                    if self.audio_failed:
+                        self.last_recording = None
+                    elif result.duration >= 0.15:
+                        self.last_recording = result
+                        message = f"Micrófono apagado. Captura lista: {result.duration:.1f} s."
+                        if self.capture.limit_reached:
+                            message += " Se alcanzó el límite de 10 segundos."
+                        if self.capture.overflow:
+                            message += " Se perdieron muestras; probá otra entrada."
+                        self.audio_message.set(message)
+                    else:
+                        self.audio_message.set("Micrófono apagado. Captura muy corta; mantené pulsado mientras hablás.")
+                    self._log(self.audio_message.get())
+                if self.audio_phase == "idle":
+                    self.talk_button.configure(text="Mantené pulsado para hablar")
+                    self.level_bar['value'] = 0
+                self._audio_controls()
+        except Empty:
+            pass
+        if self.audio_phase == "recording":
+            self.level_bar['value'] = self.capture.level*100
+            self.audio_message.set(f"Escuchando… {self.capture.duration:.1f} / 10 s. Soltá para terminar.")
+            if self.capture.limit_reached or self.capture.finished.is_set():
+                self.stop_recording()
 
     def _controls(self):
         def enable(widget, allowed):
@@ -207,6 +372,7 @@ class AubarApp:
                 self._controls()
         except Empty:
             pass
+        self._drain_audio()
         if not self.closed:
             self._events_timer = self.root.after(80, self._drain)
 
@@ -220,10 +386,14 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.capture.cancel()
+        self.last_recording = None
         self.root.after_cancel(self._events_timer)
         self.root.after_cancel(self._poll_timer)
         self.executor.submit(self.session.close)
         self.executor.shutdown(wait=False, cancel_futures=False)
+        self.audio_executor.submit(self.capture.finish)
+        self.audio_executor.shutdown(wait=False, cancel_futures=False)
         self.root.destroy()
 
 

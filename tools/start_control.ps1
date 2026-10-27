@@ -21,7 +21,7 @@ if (-not (Test-Path -LiteralPath $kirbyPython)) {
 
 & $kirbyPython -c 'import sys; assert sys.version_info >= (3, 11); import tkinter'
 if ($LASTEXITCODE -ne 0) { throw 'Se necesita Python 3.11 o superior con tkinter.' }
-& $kirbyPython -c 'import serial; assert serial.VERSION == str(3.5)'
+& $kirbyPython -c 'import serial, sounddevice; assert serial.VERSION == str(3.5)'
 if ($LASTEXITCODE -ne 0) {
     & $kirbyPython -m pip install -r (Join-Path $kirbyRoot 'pc\requirements.txt')
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias. Revisa la conexion a internet.' }

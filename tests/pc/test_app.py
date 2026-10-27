@@ -2,10 +2,13 @@ import threading
 import time
 import tkinter as tk
 import unittest
+from array import array
+from audio_fakes import FakeAudio
 
 from pc.aubar_control.app import AubarApp
 from pc.aubar_control.protocol import DeviceError, DeviceStatus
 from pc.aubar_control.session import DevicePort
+from pc.aubar_control.audio import InputDevice, MicrophoneCapture
 
 
 class FakeSession:
@@ -35,8 +38,10 @@ class AppTests(unittest.TestCase):
         self.root.withdraw()
         self.session = FakeSession()
         self.ports = [DevicePort("COM1", "Serie"), DevicePort("COM3", "ESP32", True)]
-        self.app = AubarApp(self.root, self.session, lambda: self.ports)
-        self.pump(lambda: not self.app.busy)
+        self.audio = FakeAudio()
+        self.app = AubarApp(self.root, self.session, lambda: self.ports,
+                           MicrophoneCapture(self.audio), lambda: [InputDevice(1, 'Microfono', 'Prueba', True)])
+        self.pump(lambda: not self.app.busy and not self.app.audio_scan_busy)
 
     def tearDown(self):
         if self.session.gate:
@@ -93,6 +98,45 @@ class AppTests(unittest.TestCase):
         self.session.gate.set()
         self.pump(lambda: not self.app.busy)
         self.assertTrue(self.app.connected)
+
+    def test_push_to_talk_records_only_while_held(self):
+        self.app.start_recording()
+        self.pump(lambda: self.app.audio_phase == 'recording')
+        pcm = array('h', [4000]*4000).tobytes()
+        self.audio.streams[-1].emit(pcm)
+        self.app.stop_recording()
+        self.audio.streams[-1].emit(pcm)
+        self.pump(lambda: self.app.audio_phase == 'idle')
+        self.assertEqual(self.app.last_recording.pcm, pcm)
+        self.assertIn('apagado', self.app.audio_message.get())
+        self.assertTrue(self.audio.streams[-1].closed)
+
+    def test_audio_errors_do_not_disconnect_usb(self):
+        self.app.connect()
+        self.pump(lambda: not self.app.busy)
+        self.audio.reject_open = True
+        self.app.start_recording()
+        self.pump(lambda: self.app.audio_phase == 'idle')
+        self.assertTrue(self.app.connected)
+        self.assertIsNone(self.app.last_recording)
+        self.assertIn('No se pudo abrir', self.app.audio_message.get())
+
+    def test_focus_loss_stops_capture(self):
+        self.app.start_recording()
+        self.pump(lambda: self.app.audio_phase == 'recording')
+        self.audio.streams[-1].emit(array('h', [4000]*4000).tobytes())
+        self.app._focus_out(None)  # Withdrawn test window has no application focus.
+        self.pump(lambda: self.app.audio_phase == 'idle')
+        self.assertFalse(self.app.capture.requested.is_set())
+        self.assertTrue(self.audio.streams[-1].closed)
+
+    def test_limit_stops_capture_without_release(self):
+        self.app.start_recording()
+        self.pump(lambda: self.app.audio_phase == 'recording')
+        self.audio.streams[-1].emit(array('h', [4000]*161000).tobytes())
+        self.pump(lambda: self.app.audio_phase == 'idle')
+        self.assertEqual(self.app.last_recording.duration, 10)
+        self.assertTrue(self.audio.streams[-1].closed)
 
 
 if __name__ == "__main__":
