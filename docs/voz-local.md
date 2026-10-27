@@ -98,6 +98,9 @@ volumen, detención y protección de micrófono que las confirmaciones del avata
 La escucha se pausa durante la consulta y la reproducción, y vuelve después
 de la protección de 350 ms solo si sigue activada. El texto permanece en **IA**
 si la voz está desactivada o falla. Los errores de audio no repiten la consulta.
+Si hay placa compatible, la lectura espera la confirmación de la expresión o
+animación seleccionada. Los cambios visuales de la IA no agregan otra frase de
+confirmación; los identificadores y el JSON nunca se entregan al motor de voz.
 
 La [guía de Groq](groq.md#conversación-con-micrófono-y-dora) describe el contexto,
 los controles, las lecturas pendientes y las diferencias entre entrada por voz

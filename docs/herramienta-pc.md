@@ -251,9 +251,10 @@ Sin configuración válida, informa qué falta y no acumula consultas para
 enviarlas después. **Probar conexión** sigue siendo una prueba independiente.
 
 Ejemplos para conversar: con el botón, decir «contame algo interesante»;
-en escucha automática, «Aubar, contame algo interesante». Una consulta abierta
-no cambia por sí misma la expresión del avatar. Los comandos conocidos, como
-«Aubar, contento», conservan su ejecución local y no se envían a Groq.
+en escucha automática, «Aubar, contame algo interesante». Con la placa conectada,
+se muestra Pensar mientras espera y luego una expresión o animación del catálogo
+acorde con la respuesta. Los comandos conocidos, como «Aubar, contento»,
+conservan su ejecución local y no se envían a Groq.
 
 El ruido, las voces de fondo o una pronunciación parecida pueden producir
 errores: la palabra de activación reduce las activaciones involuntarias sin
@@ -309,6 +310,10 @@ detalla la personalidad, los límites y los reinicios. Las consultas reconocidas
 por micrófono se envían al mismo contexto y sus respuestas se leen con Dora
 si la voz está activada. El campo de texto y **Probar conexión** conservan
 su salida como texto, sin reproducción automática.
+La respuesta conversacional propone una expresión o animación del catálogo;
+el panel la valida y espera la confirmación USB antes de iniciar su lectura.
+La [guía de expresiones de la IA](groq.md#expresiones-y-animaciones-de-la-conversación)
+explica el modo de espera, el reemplazo por neutral y la prioridad del control manual.
 
 ## Motor de salida de voz
 

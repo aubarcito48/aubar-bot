@@ -6,6 +6,7 @@ import socket
 from threading import Lock
 import time
 from .conversation import ConversationRequest, Message, SYSTEM_PROMPT
+from .ai_avatar import AvatarReply,AVATAR_SCHEMA,AVATAR_INSTRUCTIONS,parse_avatar_reply,normalize_reply
 
 HOST='api.groq.com'
 ENDPOINT='/openai/v1/chat/completions'
@@ -51,6 +52,12 @@ class GroqClient:
             'max_completion_tokens':512,
             'stream':False,
         }
+        if isinstance(text,ConversationRequest):
+            payload['messages'][0]['content']+='\n'+AVATAR_INSTRUCTIONS
+            payload['response_format']=(
+                {'type':'json_schema','json_schema':{'name':'aubar_reply','strict':True,'schema':AVATAR_SCHEMA}}
+                if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b','qwen/qwen3.8-27b','meta-models/muse-spark-open')
+                else {'type':'json_object'})
         if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b'):
             payload.update(reasoning_effort='low',include_reasoning=False)
         connection=None
@@ -90,8 +97,12 @@ class GroqClient:
                 result=json.loads(data)
                 choice=result['choices'][0]
                 content=choice['message']['content']
-                if choice.get('finish_reason')!='stop' or not isinstance(content,str) or not content.strip() or len(content)>2000:
+                if choice.get('finish_reason')!='stop' or not isinstance(content,str) or not content.strip():
                     error='Groq devolvió una respuesta vacía, incompleta o demasiado larga. Podés iniciar otra prueba.'
+                elif isinstance(text,ConversationRequest):
+                    answer=parse_avatar_reply(content.replace(config.api_key,'[credencial oculta]'))
+                elif len(content)>2000:
+                    error='Groq devolvió una respuesta demasiado larga. Podés iniciar otra prueba.'
                 else:
                     answer=content.strip().replace(config.api_key,'[credencial oculta]')
         except (TimeoutError,socket.timeout):
@@ -139,6 +150,9 @@ class GroqService:
         error=None
         try:
             answer=self.client.complete(config,text)
+            if isinstance(text,ConversationRequest):
+                reply=normalize_reply(answer)
+                return AvatarReply(reply.text.replace(config.api_key,'[credencial oculta]'),reply.action,reply.fallback)
             if not isinstance(answer,str) or not answer.strip() or len(answer)>2000:
                 error='La respuesta de Groq no tiene un formato válido.'
             else:

@@ -114,8 +114,8 @@ retoma la escucha automática si sigue activada. La captura manual requiere
 otra pulsación para continuar; también funciona sin conectar el ESP32.
 
 Los comandos exactos del avatar mantienen prioridad y se ejecutan localmente,
-sin consultar a Groq. Una consulta conversacional todavía no selecciona
-expresiones o animaciones; esa integración se implementa por separado.
+sin consultar a Groq. Las consultas conversacionales también proponen una
+expresión o animación validada para acompañar la respuesta, como se detalla abajo.
 Los mensajes escritos y **Probar conexión** siguen mostrando texto sin lectura
 automática. El historial sí se comparte entre preguntas escritas y habladas.
 
@@ -134,6 +134,49 @@ anteriores. Una pregunta capturada antes de un reinicio o cambio de conexión
 no se envía después. Desconectar durante una consulta por voz descarta su
 resultado tardío, sin reejecutarlo al reconectar. Apagar el micrófono durante
 la respuesta lo mantiene apagado al terminar.
+
+## Expresiones y animaciones de la conversación
+
+Con la placa conectada, Aubar muestra **Pensar** mientras Groq prepara una
+respuesta. Después aplica la expresión o animación elegida para acompañar el
+texto. Funciona tanto con consultas escritas como habladas; las escritas
+mantienen su salida de texto. El estado visual confirmado aparece en **IA**
+y en los valores de **Dispositivo**.
+
+Groq devuelve un objeto con `text`, `avatar_type` y `avatar_id`. Solo `text`
+se muestra como respuesta, se guarda en el historial y se entrega a Dora.
+La aplicación valida que el tipo y el identificador correspondan al catálogo
+de 28 expresiones y 23 animaciones; no interpreta texto libre como órdenes USB.
+Una selección inválida, incompatible con su tipo o con campos inesperados usa
+**Neutral** cuando el texto sigue siendo válido. Un JSON ilegible o sin texto
+válido se informa como error y no se reproduce como voz.
+
+Los modelos compatibles, incluido el modelo predeterminado GPT-OSS 20B, usan
+un esquema JSON estricto. Para otros modelos se solicita modo objeto JSON y
+se mantiene la misma validación local, sin reintentos automáticos. La selección
+semántica de la emoción depende del modelo: las instrucciones priorizan una
+reacción coherente y empática, con neutral cuando no hay emoción clara.
+
+Las acciones visuales pasan por el mismo trabajador USB que el resto de las
+órdenes y requieren `OK APPLIED` y estado. No producen una confirmación hablada
+extra: el usuario escucha únicamente la respuesta de la IA. Cuando hay placa
+compatible, la lectura de Dora espera la aplicación de la selección visual.
+Sin placa, la conversación manual y la voz siguen disponibles.
+
+Un comando explícito por voz o desde **Catálogo** toma prioridad: una respuesta
+de Groq que llegue después no modifica esa selección manual. **Nueva
+conversación**, recargar la configuración y un error de Groq vuelven a neutral
+si la aplicación todavía controla esa pose. Desconectar desde el panel intenta
+dejar neutral una pose propia de la IA antes de liberar el puerto, sin
+reenviar selecciones al reconectar. Si el USB ya no está disponible, no puede
+confirmarse la limpieza ni el cambio visual; el panel informa la pérdida de
+conexión. El texto válido de una respuesta ya recibida se conserva.
+
+Las animaciones requieren protocolo USB v3 o v4. En v2 se omite la animación
+de espera y una selección animada usa neutral; las expresiones siguen estando
+disponibles. Una respuesta de otra conversación o conexión no cambia la placa.
+
+Referencia del formato: [salidas estructuradas de Groq](https://console.groq.com/docs/structured-outputs).
 
 El cliente usa HTTPS con validación de certificado y el endpoint oficial
 `https://api.groq.com/openai/v1/chat/completions`. La clave se envía únicamente
@@ -226,6 +269,18 @@ Se probó con entrada sintética, Vosk/Groq/Dora reales y comandos en COM3.
 El usuario confirmó con su micrófono tanto la conversación manual y sus
 seguimientos como el recorrido automático, la prioridad de los comandos y
 el apagado del micrófono durante la respuesta.
+
+La selección visual de la IA pasó **185 pruebas**, más una comprobación real
+con Groq y COM3: espera con Pensar, respuesta estructurada y selección visual
+confirmada, reinicio a neutral, selección inválida simulada con reemplazo por
+neutral y desconexión/reconexión sin reenvío de la pose. También se repitió el
+recorrido con Vosk y Dora reales para comprobar que solo se lee el texto.
+`tests/pc/test_ai_avatar.py` cubre todo el catálogo, validación del formato,
+selecciones inválidas, prioridad manual, reinicios con USB en curso, errores,
+compatibilidad v2 y resultados tardíos después de reconectar.
+El usuario confirmó con su micrófono las respuestas con expresión o animación
+acorde, la lectura de Dora sin metadatos, el reinicio a neutral y el control
+manual desde el catálogo.
 
 Referencias: [configurar la clave en Groq](https://console.groq.com/docs/quickstart),
 [modelos disponibles](https://console.groq.com/docs/models) y

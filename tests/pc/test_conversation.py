@@ -2,7 +2,7 @@ import json
 import unittest
 
 import test_app
-from test_groq_client import CONFIG, KEY, Connection, ControlledClient
+from test_groq_client import CONFIG, KEY, Connection, ControlledClient, completion
 from pc.aubar_control.config import load_groq_config
 from pc.aubar_control.conversation import Conversation, SYSTEM_PROMPT
 from pc.aubar_control.groq_client import GroqClient, GroqService
@@ -62,7 +62,7 @@ class ConversationTests(unittest.TestCase):
         conversation=Conversation()
         conversation.commit(conversation.prepare('Pregunta '+KEY),'Respuesta '+KEY)
         request=conversation.prepare('Seguimiento '+KEY)
-        connection=Connection()
+        connection=Connection(completion(json.dumps({'text':'Hola','avatar_type':'expression','avatar_id':'neutral'})))
         GroqClient(lambda *a,**k:connection).complete(CONFIG,request)
         payload=json.loads(connection.requests[0][1]['body'])
         self.assertEqual([m['role'] for m in payload['messages']],['system','user','assistant','user'])

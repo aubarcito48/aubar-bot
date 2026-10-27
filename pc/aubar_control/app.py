@@ -19,6 +19,7 @@ from .reply_queue import ReplyQueue
 from .config import load_groq_config
 from .groq_client import GroqService, GroqError, TEST_QUERY
 from .conversation import Conversation
+from .ai_avatar import AvatarCue,normalize_reply,safe_avatar_action
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -33,6 +34,13 @@ class AubarApp:
         self.root = root
         self.config_loader=config_loader
         self.ai_service=ai_service or GroqService()
+        self._avatar_generation=0
+        self._pending_ai_avatar=None
+        self._ai_avatar_inflight=False
+        self._ai_visual_owner=None
+        self._ai_visual_generation=0
+        self._ai_visual_connection=None
+        self.ai_avatar_message=tk.StringVar(value='El avatar acompañará la respuesta cuando la placa esté conectada.')
         self.ai_replies=ReplyQueue()
         self._ai_origin='probe'
         self._ai_voice_generation=None
@@ -210,6 +218,7 @@ class AubarApp:
 
     def reload_groq_configuration(self):
         self.ai_generation+=1
+        self._reset_ai_visual()
         self._discard_ai_speech()
         self.conversation.reset()
         self._ai_conversation_request=None
@@ -259,8 +268,7 @@ class AubarApp:
         panel.rowconfigure(5,weight=1)
         ttk.Label(panel,textvariable=self.ai_message,wraplength=600).grid(
             row=6,column=0,sticky="ew",pady=(10,6))
-        ttk.Label(panel,text="Conversación por texto con contexto durante esta sesión. "
-            "«Nueva conversación» borra lo recordado. Funciona sin conectar la placa.",style="Muted.TLabel",wraplength=600).grid(
+        ttk.Label(panel,textvariable=self.ai_avatar_message,style="Muted.TLabel",wraplength=600).grid(
             row=7,column=0,sticky="ew")
         self._ai_controls()
 
@@ -272,6 +280,7 @@ class AubarApp:
 
     def new_conversation(self):
         self.ai_generation+=1
+        self._reset_ai_visual()
         self._discard_ai_speech()
         self.conversation.reset()
         self._ai_conversation_request=None
@@ -302,6 +311,8 @@ class AubarApp:
         self._ai_origin=origin
         self._ai_voice_generation=speech_generation
         self._ai_connection_token=connection
+        self._ai_visual_generation=self._avatar_generation
+        self._ai_visual_connection=self.connection_token
         if origin=='voice':
             self.automatic_capture.pause()
         try:
@@ -311,6 +322,7 @@ class AubarApp:
             self.ai_message.set(str(error))
         else:
             self.ai_message.set('Aubar está preparando una respuesta…')
+            self._queue_ai_visual(VoiceAction('ANIMATION','thinking','Pensar'),'thinking')
         self._ai_controls()
         self._audio_controls()
         return self._ai_future is not None
@@ -339,7 +351,8 @@ class AubarApp:
         if self.closed or not self.speech_enabled.get():
             self.ai_replies.discard()
             return
-        if self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy:
+        if (self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy
+            or self._pending_ai_avatar is not None or self._ai_avatar_inflight):
             return
         self.ai_replies.take(self.ai_generation)
         if self.speak_text(reply.text):
@@ -347,6 +360,54 @@ class AubarApp:
             self.recognition_message.set('Aubar está hablando. La respuesta completa está en IA.')
         else:
             self.recognition_message.set('Respuesta disponible en IA. No se pudo iniciar la voz.')
+
+    def _queue_ai_visual(self,action,phase):
+        if not self.connected or getattr(self.session,'version',None) not in (2,3,4):
+            self.ai_avatar_message.set('Avatar sin conexión compatible. La respuesta sigue disponible en IA.')
+            return False
+        if (self._ai_visual_connection!=self.connection_token
+            or self._ai_visual_generation!=self._avatar_generation):
+            self.ai_avatar_message.set('Se conserva el estado actual del avatar.')
+            return False
+        action,_=safe_avatar_action(action.command,action.argument)
+        if action.command=='ANIMATION' and self.session.version==2:
+            if phase=='thinking':
+                return False
+            action,_=safe_avatar_action('EXPRESSION','neutral')
+        cue=AvatarCue(self.connection_token,self.ai_generation,self._avatar_generation,phase,action)
+        self._pending_ai_avatar=cue
+        self._ai_visual_owner=cue
+        self.ai_avatar_message.set('Avatar pendiente: '+action.label+'.')
+        return True
+
+    def _reset_ai_visual(self,restore=True):
+        owner=self._ai_visual_owner
+        self._pending_ai_avatar=None
+        self._ai_visual_owner=None
+        if (restore and owner is not None and not getattr(self,'closed',False)
+            and getattr(self,'connected',False) and owner.connection==self.connection_token
+            and owner.control==self._avatar_generation):
+            action,_=safe_avatar_action('EXPRESSION','neutral')
+            cue=AvatarCue(self.connection_token,self.ai_generation,self._avatar_generation,'reset',action)
+            self._pending_ai_avatar=cue
+            self._ai_visual_owner=cue
+
+    def _take_manual_avatar(self):
+        self._avatar_generation+=1
+        self._pending_ai_avatar=None
+        self._ai_visual_owner=None
+        self.ai_avatar_message.set('Avatar bajo control manual.')
+
+    def _dispatch_ai_avatar(self):
+        cue=self._pending_ai_avatar
+        if cue is None or self.closed or self.busy:
+            return
+        self._pending_ai_avatar=None
+        if (not self.connected or cue.connection!=self.connection_token
+            or cue.conversation!=self.ai_generation or cue.control!=self._avatar_generation):
+            return
+        self._ai_avatar_inflight=True
+        self._submit('ai_avatar',lambda:(cue,self.session.apply_action(cue.action)))
 
     def _show_ai_response(self,text):
         self.ai_response.configure(state='normal')
@@ -383,7 +444,9 @@ class AubarApp:
                origin=='voice' and self._ai_connection_token!=self.connection_token)
         failed=False
         try:
-            text=future.result()
+            result=future.result()
+            reply=normalize_reply(result) if request is not None else None
+            text=reply.text if reply is not None else result
         except (CancelledError,GroqError) as error:
             failed=True
             if not stale:
@@ -402,6 +465,7 @@ class AubarApp:
                     if origin=='text':
                         self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
+                    self._queue_ai_visual(reply.action,'answer')
                     if origin=='voice':
                         self.recognition_message.set('Respuesta disponible en IA.')
                         if self.speech_enabled.get() and voice_generation==self.ai_replies.generation:
@@ -413,6 +477,8 @@ class AubarApp:
                 self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
         if origin=='voice' and not stale and failed:
             self.recognition_message.set(self.ai_message.get())
+        if failed and not stale:
+            self._reset_ai_visual()
         self._ai_controls()
         self._audio_controls()
 
@@ -660,6 +726,7 @@ class AubarApp:
                 return
             action=VoiceAction(kind, identifier, selected.get())
         token=self.connection_token
+        self._take_manual_avatar()
         generation=self.replies.generation
         self.catalog_message.set('Enviando al ESP32…')
         self._submit('catalog', lambda: (token, action, self.session.apply_action(action),generation))
@@ -1038,11 +1105,23 @@ class AubarApp:
     def disconnect(self):
         if self.busy:
             return
+        owner=self._ai_visual_owner
+        neutralize=(owner is not None and self.connected and owner.connection==self.connection_token
+                    and owner.control==self._avatar_generation)
         self._invalidate_connection()
-        self._submit("disconnect", self.session.close)
+        def release():
+            try:
+                if neutralize:
+                    action,_=safe_avatar_action('EXPRESSION','neutral')
+                    self.session.apply_action(action)
+            finally:
+                self.session.close()
+        self._submit("disconnect",release)
 
     def _invalidate_connection(self):
         self.connection_token += 1
+        self._reset_ai_visual(restore=False)
+        self.ai_avatar_message.set('Avatar sin conexión confirmada.')
         self._discard_ai_speech()
         self.recognized_query=None
         self.replies.cancel()
@@ -1074,6 +1153,7 @@ class AubarApp:
             self._audio_controls()
             return
         self.voice_inflight = True
+        self._take_manual_avatar()
         self._submit('voice', lambda: (token, action, self.session.apply_action(action),generation))
 
     def refresh_status(self):
@@ -1095,6 +1175,8 @@ class AubarApp:
             while True:
                 operation, result, error = self.events.get_nowait()
                 self.busy = False
+                if operation=='ai_avatar':
+                    self._ai_avatar_inflight=False
                 if operation=='voice':
                     self.voice_inflight = False
                 if error:
@@ -1108,6 +1190,8 @@ class AubarApp:
                         self.recognition_message.set(str(error))
                     if operation == 'catalog':
                         self.catalog_message.set(str(error))
+                    if operation=='ai_avatar':
+                        self.ai_avatar_message.set('No se pudo confirmar la expresión del avatar. Revisá la conexión USB.')
                 elif operation == "ports":
                     previous = self.port_value.get()
                     self.ports = {port.label: port for port in result}
@@ -1118,6 +1202,7 @@ class AubarApp:
                 elif operation == "connect":
                     self.active_port, status = result
                     self.connected = True
+                    self.ai_avatar_message.set('Avatar conectado. Listo para acompañar próximas respuestas.')
                     self._apply_status(status)
                     self._message(f"Conectado a {self.active_port}. El estado se actualiza automáticamente.")
                     self._log(f"Conexión confirmada con Aubar Bot en {self.active_port}.")
@@ -1125,6 +1210,14 @@ class AubarApp:
                     self._apply_status(result)
                     if operation == "status":
                         self._log("Estado del dispositivo actualizado.")
+                elif operation=='ai_avatar':
+                    cue,status=result
+                    if (self.connected and cue.connection==self.connection_token
+                        and cue.conversation==self.ai_generation and cue.control==self._avatar_generation):
+                        self._apply_status(status)
+                        self.ai_avatar_message.set('Avatar: '+cue.action.label+'. Confirmado por el ESP32.')
+                        if cue.phase=='reset' and self._ai_visual_owner==cue:
+                            self._ai_visual_owner=None
                 elif operation in ('voice', 'catalog'):
                     token, action, status, generation = result
                     confirmed=token == self.connection_token and self.connected
@@ -1160,11 +1253,12 @@ class AubarApp:
         self._refresh_playback_gate()
         self._tick_automatic()
         self._dispatch_voice()
+        self._dispatch_ai_avatar()
         if not self.closed:
             self._events_timer = self.root.after(80, self._drain)
 
     def _poll(self):
-        if self.connected and not self.busy and self.pending_action is None:
+        if self.connected and not self.busy and self.pending_action is None and self._pending_ai_avatar is None:
             self._submit("poll", self.session.status)
         if not self.closed:
             self._poll_timer = self.root.after(1500, self._poll)
@@ -1173,6 +1267,7 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self._reset_ai_visual(restore=False)
         self.ai_replies.cancel()
         self.recognized_query=None
         self.ai_generation+=1
