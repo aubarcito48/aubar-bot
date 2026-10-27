@@ -101,6 +101,11 @@ si la voz está desactivada o falla. Los errores de audio no repiten la consulta
 Si hay placa compatible, la lectura espera la confirmación de la expresión o
 animación seleccionada. Los cambios visuales de la IA no agregan otra frase de
 confirmación; los identificadores y el JSON nunca se entregan al motor de voz.
+**Cancelar** en **IA** interrumpe la consulta y su lectura pendiente o activa.
+**Detener** en esta pestaña interrumpe únicamente la voz. Una respuesta textual
+ya completada conserva su contexto; una consulta cancelada todavía pendiente
+no lo modifica. La aplicación espera la finalización de la limpieza antes de
+permitir otra respuesta conversacional.
 
 La [guía de Groq](groq.md#conversación-con-micrófono-y-dora) describe el contexto,
 los controles, las lecturas pendientes y las diferencias entre entrada por voz

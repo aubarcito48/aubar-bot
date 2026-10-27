@@ -314,6 +314,11 @@ La respuesta conversacional propone una expresión o animación del catálogo;
 el panel la valida y espera la confirmación USB antes de iniciar su lectura.
 La [guía de expresiones de la IA](groq.md#expresiones-y-animaciones-de-la-conversación)
 explica el modo de espera, el reemplazo por neutral y la prioridad del control manual.
+**Cancelar** interrumpe la consulta actual y su audio pendiente, conservando
+los intercambios ya completados. Mientras una respuesta prepara, confirma su
+pose o habla, no se envía otra consulta en paralelo. **Nueva conversación**
+también borra el contexto. La [guía de cancelaciones](groq.md#cancelar-consultas-y-continuar)
+detalla qué se descarta al cancelar, desconectar o cerrar el panel.
 
 ## Motor de salida de voz
 

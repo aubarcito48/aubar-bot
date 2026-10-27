@@ -72,3 +72,6 @@ class Conversation:
     def reset(self):
         self._turns.clear()
         self.revision+=1
+
+    def invalidate_pending(self):
+        self.revision+=1

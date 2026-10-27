@@ -88,9 +88,10 @@ de actividad del panel.
 El historial solo incorpora un par pregunta/respuesta después de una respuesta
 válida y exitosa. Los errores y resultados descartados no agregan turnos.
 **Nueva conversación** borra el contexto y la vista, e invalida cualquier
-respuesta pendiente. Si una solicitud ya estaba en curso, su operación de red
-puede terminar en el trabajador; su resultado no reaparece ni se incorpora al
-nuevo historial. Se podrá enviar otro mensaje cuando finalice esa operación.
+respuesta pendiente. Si una solicitud ya estaba en curso, se solicita su
+cancelación e interrumpe la lectura de red; su resultado no reaparece ni se
+incorpora al nuevo historial. Se podrá enviar otro mensaje cuando el trabajador
+y las salidas pendientes terminen de liberar sus recursos.
 
 Recargar la configuración y cerrar el panel también reinician el contexto.
 No se recuperan conversaciones de una sesión anterior. **Probar conexión**
@@ -132,8 +133,50 @@ termine una reproducción en curso, sin superponer voces. **Nueva conversación*
 recargar la configuración o cambiar la conexión USB descartan lecturas
 anteriores. Una pregunta capturada antes de un reinicio o cambio de conexión
 no se envía después. Desconectar durante una consulta por voz descarta su
-resultado tardío, sin reejecutarlo al reconectar. Apagar el micrófono durante
+resultado tardío, sin reejecutarlo al reconectar. Los cambios de conexión
+también cancelan las consultas escritas que estuvieran pendientes.
+Apagar el micrófono durante
 la respuesta lo mantiene apagado al terminar.
+
+## Cancelar consultas y continuar
+
+El botón **Cancelar** de **IA** descarta la consulta actual, su lectura
+pendiente o en curso y los cambios visuales anteriores que todavía no se
+confirmaron. Invalida también una pregunta que siga reconociéndose para que
+no se envíe cuando termine el reconocimiento. Si la aplicación controla la
+pose, restaura neutral sin sobrescribir una selección manual.
+
+Cancelar conserva los intercambios que ya se completaron. Una respuesta de
+Groq recibida y agregada al contexto antes de cancelar su lectura sigue como
+texto; una consulta cancelada antes de recibir la respuesta no agrega un
+turno. **Nueva conversación** cancela y, además, borra todo el contexto.
+**Recargar configuración** también cancela y reinicia la conversación.
+
+**Detener** en **Voz** solo interrumpe la lectura: la consulta de Groq puede
+continuar y mostrar su texto. **Cancelar** en **IA** cancela el turno pendiente
+completo. Ninguno vuelve a ejecutar una consulta por su cuenta.
+
+Una sola respuesta conversacional puede estar en curso: mientras prepara,
+confirma el avatar o lee con Dora, **Enviar** y **Probar conexión** permanecen
+deshabilitados. No se acumulan preguntas al pulsar varias veces. La escucha
+queda pausada durante una conversación iniciada por texto o voz; el catálogo
+y las consultas USB siguen disponibles. Una prueba de conexión independiente
+no bloquea los comandos locales del micrófono.
+
+La cancelación interrumpe la lectura de un socket activo, y el trabajador
+cierra la conexión. Si todavía está resolviendo el servidor o estableciendo
+la conexión, se comprueba la cancelación antes de enviar el texto; los
+controles permanecen disponibles mientras finaliza esa operación con su
+tiempo de espera. El panel habilita una consulta nueva después de la limpieza,
+sin iniciar trabajos paralelos. Una solicitud ya recibida por Groq puede
+seguir ejecutándose allí; el cliente descarta su resultado localmente.
+
+Desconectar o reconectar invalida las consultas pendientes y no las reenvía.
+Cerrar el panel cancela la red y el audio, cierra el micrófono y libera el USB;
+si todavía controla una pose de la IA, intenta dejarla neutral antes de cerrar
+el puerto. Una orden USB ya enviada puede terminar de aplicarse antes de esa
+limpieza. Los errores de red, credenciales o límites conservan el panel usable
+y requieren una acción explícita para volver a consultar.
 
 ## Expresiones y animaciones de la conversación
 
@@ -196,9 +239,8 @@ Los errores de autenticación, permisos, modelo no disponible, límites,
 servicio remoto, conexión y tiempo de espera muestran mensajes que permiten
 corregir la configuración o iniciar otra prueba. No desconectan el avatar.
 Cambiar la configuración mientras hay una prueba pendiente descarta su
-resultado; se podrá iniciar una nueva al terminar la anterior. Cerrar el
-panel descarta el resultado y no bloquea Tk esperando la red; una operación
-ya iniciada termina en el trabajador con su tiempo de espera y libera la conexión.
+resultado y solicita su cancelación. Cerrar el panel no bloquea Tk esperando
+la red: se interrumpe el socket activo y la limpieza final queda en el trabajador.
 
 ## Validación
 
@@ -281,6 +323,17 @@ compatibilidad v2 y resultados tardíos después de reconectar.
 El usuario confirmó con su micrófono las respuestas con expresión o animación
 acorde, la lectura de Dora sin metadatos, el reinicio a neutral y el control
 manual desde el catálogo.
+
+La coordinación de cancelaciones y reconexiones pasó **194 pruebas** y
+`pip check`. `tests/pc/test_ai_cancellation.py` verifica cancelaciones durante
+conexión, lectura, reconocimiento y narración; conservación del contexto
+completado; descarte de resultados tardíos; y reutilización después de cancelar.
+Con Groq real y COM3 se comprobó que cancelar interrumpe la conexión sin agregar
+historial ni reproducir audio, que una consulta nueva funciona y que cerrar el
+panel libera COM3. Los controles entran en una ventana de 760 × 650.
+El usuario confirmó que Cancelar corta la narración, conserva el contexto
+completado y permite continuar, y que la reconexión USB no repite respuestas
+pendientes y permite realizar una consulta nueva.
 
 Referencias: [configurar la clave en Groq](https://console.groq.com/docs/quickstart),
 [modelos disponibles](https://console.groq.com/docs/models) y

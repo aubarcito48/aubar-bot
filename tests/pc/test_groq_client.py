@@ -117,7 +117,7 @@ class ControlledClient:
         self.started=threading.Event();self.release=threading.Event()
         self.error=None;self.calls=[]
 
-    def complete(self,config,text):
+    def complete(self,config,text,*,cancel_event=None):
         self.calls.append(text);self.started.set();self.release.wait(2)
         if self.error:
             raise self.error
@@ -164,12 +164,14 @@ class GroqPanelTests(unittest.TestCase):
         test_app.AppTests.tearDown(self)
 
     def test_pending_request_keeps_tk_usb_and_voice_available_without_duplicate_calls(self):
+        self.app.connect()
+        self.pump(lambda:self.app.connected and not self.app.busy)
         self.app.test_groq()
         self.assertTrue(self.client.started.wait(1))
         self.app.test_groq()
         self.assertEqual(len(self.client.calls),1)
         heartbeat=[];self.root.after(5,lambda:heartbeat.append(True))
-        self.app.connect()
+        self.app.refresh_status()
         self.pump(lambda:self.app.connected and not self.app.busy and heartbeat)
         self.assertFalse(self.app._ai_future.done())
         self.app.test_speech()

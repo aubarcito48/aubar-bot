@@ -72,8 +72,8 @@ class AvatarClient(ControlledClient):
         super().__init__()
         self.answer=AvatarReply('Respuesta humana.',VoiceAction('EXPRESSION','contento','Contento'))
 
-    def complete(self,config,text):
-        super().complete(config,text)
+    def complete(self,config,text,*,cancel_event=None):
+        super().complete(config,text,cancel_event=cancel_event)
         return self.answer
 
 
