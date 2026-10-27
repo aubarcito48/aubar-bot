@@ -19,8 +19,10 @@ def normalize(text: str) -> str:
 
 def match_command(text: str) -> VoiceAction | None:
     phrase = normalize(text)
-    if phrase.startswith('kirby '):
-        phrase = phrase[6:]
+    for name in ('aubar ', 'kirby '):
+        if phrase.startswith(name):
+            phrase = phrase[len(name):]
+            break
     if phrase.endswith(' por favor'):
         phrase = phrase[:-10]
     actions = {}

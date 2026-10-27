@@ -11,6 +11,7 @@ from .audio import AudioError, MicrophoneCapture, available_inputs
 from .recognition import LocalRecognizer, RecognitionError
 from .catalog import EXPRESSIONS, ANIMATIONS
 from .voice_commands import VoiceAction
+from .automatic_audio import AutomaticCapture
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -20,13 +21,17 @@ PINK = "#ffc2e9"
 
 class AubarApp:
     def __init__(self, root, session=None, port_provider=available_ports,
-                 capture=None, audio_provider=available_inputs, recognizer=None):
+                 capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None):
         self.root = root
         self.session = session or DeviceSession()
         self.port_provider = port_provider
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-usb")
         self.events = Queue()
         self.capture = capture or MicrophoneCapture()
+        self.automatic_capture = automatic_capture or AutomaticCapture(self.capture.backend)
+        self.auto_enabled = tk.BooleanVar(value=False)
+        self.auto_generation = 0
+        self.auto_running = False
         self.audio_provider = audio_provider
         self.audio_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-mic")
         self.audio_events = Queue()
@@ -49,6 +54,7 @@ class AubarApp:
         self.connection_token = 0
         self.capture_connection_token = None
         self.pending_action = None
+        self.voice_inflight = False
         self.port_value = tk.StringVar()
         self.banner_value = tk.StringVar(value="Buscando puertos…")
         self.values = {key: tk.StringVar(value="—") for key in ("expression", "mode", "look")}
@@ -201,11 +207,16 @@ class AubarApp:
         self.mic_combo.bind("<<ComboboxSelected>>", lambda _: self._audio_controls())
         self.mic_scan_button = ttk.Button(panel, text="Buscar micrófonos", command=self.refresh_microphones)
         self.mic_scan_button.grid(row=1, column=1)
-        ttk.Label(panel, text="Mantené el botón pulsado mientras hablás. Soltalo para terminar.",
-                  wraplength=650).grid(row=2, column=0, columnspan=2, sticky="w", pady=(18, 14))
+        modes = ttk.Frame(panel)
+        modes.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 8))
+        self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · «Aubar» + comando",
+            variable=self.auto_enabled, command=self.toggle_automatic)
+        self.auto_check.pack(anchor="w")
+        ttk.Label(modes, text="Automática: hablá y hacé una pausa. Manual: mantené pulsado el botón.",
+                  style="Muted.TLabel", wraplength=650).pack(anchor="w", pady=(6, 0))
         self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",
-                                     activebackground="#f2aedc", font=("Segoe UI", 15, "bold"),
-                                     relief="flat", padx=20, pady=18, takefocus=True)
+                                     activebackground="#f2aedc", font=("Segoe UI", 13, "bold"),
+                                     relief="flat", padx=20, pady=12, takefocus=True)
         self.talk_button.grid(row=3, column=0, columnspan=2, sticky="ew")
         self.talk_button.bind("<ButtonPress-1>", self.start_recording)
         self.talk_button.bind("<KeyPress-space>", self.start_recording)
@@ -214,12 +225,12 @@ class AubarApp:
         self.root.bind("<FocusOut>", self._focus_out, add="+")
         self.root.bind("<Unmap>", lambda e: self.stop_recording() if e.widget is self.root else None, add="+")
         self.audio_label = tk.Label(panel, textvariable=self.audio_message, bg=BG, fg=INK,
-                                    font=("Segoe UI", 11), anchor="w", wraplength=650, pady=14)
+                                    font=("Segoe UI", 11), anchor="w", wraplength=650, pady=8)
         self.audio_label.grid(row=4, column=0, columnspan=2, sticky="ew")
         self.level_bar = ttk.Progressbar(panel, maximum=100, mode="determinate")
-        self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 20))
-        ttk.Label(panel, text="Se detiene a los 10 segundos o al salir de la ventana.\n"
-                  "Al soltar, la frase válida se envía al ESP32 conectado y se muestra su confirmación.",
+        self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        ttk.Label(panel, text="Automática sigue al minimizar; apagá la casilla para cerrar el micrófono.\n"
+                  "Una pausa de 0,8 s termina la frase. Manual se detiene al soltar o salir.",
                   style="Muted.TLabel", wraplength=650).grid(row=6, column=0, columnspan=2, sticky="w")
         ttk.Label(panel, text="Lo que escuché", style="Section.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 8))
         tk.Label(panel, textvariable=self.recognition_text, bg="white", fg=INK,
@@ -229,12 +240,14 @@ class AubarApp:
         self._audio_controls()
 
     def _audio_controls(self):
-        idle = self.audio_phase == "idle" and not self.audio_scan_busy
+        idle = self.audio_phase == "idle" and not self.audio_scan_busy and not self.auto_enabled.get()
         self.mic_combo.configure(state="readonly" if idle else "disabled")
         self.mic_scan_button.configure(state="normal" if idle else "disabled")
         # Keep the button enabled during recording so it receives release events.
-        allowed = not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
+        allowed = not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
         self.talk_button.configure(state="normal" if allowed else "disabled")
+        auto_allowed = self.auto_enabled.get() or (idle and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
+        self.auto_check.configure(state="normal" if auto_allowed else "disabled")
         if hasattr(self, 'catalog_buttons'):
             for button in self.catalog_buttons:
                 button.configure(state="normal" if self.connected and not self.busy and self.audio_phase=="idle" else "disabled")
@@ -252,14 +265,14 @@ class AubarApp:
         self.audio_executor.submit(run)
 
     def refresh_microphones(self):
-        if self.audio_phase != "idle" or self.audio_scan_busy or self.closed:
+        if self.auto_enabled.get() or self.audio_phase != "idle" or self.audio_scan_busy or self.closed:
             return
         self.audio_scan_busy = True
         self._audio_controls()
         self._audio_submit("inputs", self.audio_provider)
 
     def start_recording(self, event=None):
-        if self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
+        if self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
             return "break"
         device = self.inputs.get(self.mic_value.get())
         if device is None:
@@ -298,6 +311,10 @@ class AubarApp:
         try:
             while True:
                 operation, result, error = self.audio_events.get_nowait()
+                if operation.startswith('auto_'):
+                    self._handle_automatic_event(operation, result, error)
+                    self._audio_controls()
+                    continue
                 if error:
                     self.audio_failed = True
                     self.audio_phase = "idle"
@@ -373,6 +390,111 @@ class AubarApp:
             if self.capture.limit_reached or self.capture.finished.is_set():
                 self.stop_recording()
 
+    def toggle_automatic(self):
+        if not self.auto_enabled.get():
+            self.stop_automatic()
+            return
+        device = self.inputs.get(self.mic_value.get())
+        if self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
+            self.auto_enabled.set(False)
+            self._audio_controls()
+            return
+        self.auto_generation += 1
+        generation = self.auto_generation
+        self.automatic_capture.arm()
+        self.audio_phase = 'auto_starting'
+        self.audio_message.set('Preparando escucha automática…')
+        self.recognition_message.set('Decí «Aubar, contento» o «Aubar, celebrar» cuando esté lista.')
+        self._audio_controls()
+        self._audio_submit('auto_start', lambda: (generation, self.automatic_capture.start(device.index)))
+
+    def stop_automatic(self, message='Escucha automática apagada. Micrófono cerrado.'):
+        self.auto_enabled.set(False)
+        self.auto_generation += 1
+        generation = self.auto_generation
+        self.auto_running = False
+        self.automatic_capture.cancel()
+        self.automatic_capture.pause()
+        self.capture_connection_token = None
+        self.pending_action = None
+        self.audio_phase = 'auto_stopping'
+        self.audio_message.set('Cerrando escucha automática…')
+        self._audio_controls()
+        def finish():
+            self.automatic_capture.finish()
+            return generation, message
+        self._audio_submit('auto_stop', finish)
+
+    def _handle_automatic_event(self, operation, result, error):
+        if error is not None:
+            if operation=='auto_stop':
+                self.auto_enabled.set(False)
+                self.auto_running = False
+                self.audio_phase = 'idle'
+                self.audio_message.set(str(error))
+            else:
+                self.stop_automatic(str(error))
+            self._log(str(error))
+            return
+        generation, value = result
+        if generation!=self.auto_generation:
+            return
+        if operation=='auto_stop':
+            self.audio_phase = 'idle'
+            self.audio_message.set(value)
+            self.level_bar['value'] = 0
+            return
+        if not self.auto_enabled.get():
+            return
+        if operation=='auto_start':
+            if not value:
+                self.stop_automatic('No se pudo iniciar la escucha automática.')
+                return
+            self.auto_running = True
+            self.audio_phase = 'idle'
+        elif operation=='auto_recognized':
+            # The existing sender still checks the live connection token and
+            # waits for the device acknowledgment. Nothing is retried.
+            self.audio_events.put(('recognized', value, None))
+
+    def _tick_automatic(self):
+        if not self.auto_enabled.get() or not self.auto_running or self.closed:
+            return
+        capture = self.automatic_capture
+        if capture.finished.is_set() or not capture.requested.is_set():
+            self.stop_automatic('El micrófono se desconectó. Revisá la entrada y activá la escucha de nuevo.')
+            return
+        try:
+            recording = capture.utterances.get_nowait()
+        except Empty:
+            recording = None
+        if isinstance(recording, AudioError):
+            self.stop_automatic(str(recording))
+            return
+        if recording is not None:
+            generation = self.auto_generation
+            self.capture_connection_token = self.connection_token
+            self.last_recording = None  # No continuous audio retained by the UI.
+            self.recognized_action = None
+            self.audio_phase = 'auto_recognizing'
+            self.audio_message.set('Frase terminada. Reconociendo…')
+            self.level_bar['value'] = 0
+            self.recognition_text.set('Procesando la voz…')
+            self.recognition_message.set('Comprobando «Aubar» y el comando…')
+            self._audio_controls()
+            self._audio_submit('auto_recognized', lambda: (
+                generation, self.recognizer.recognize_automatic(recording)))
+            return
+        if self.audio_phase=='idle' and not self.busy and self.pending_action is None:
+            if not capture.ready.is_set():
+                self.audio_message.set('Preparando micrófono…')
+                return
+            capture.resume()
+            self.level_bar['value'] = capture.level*100
+            self.audio_message.set('Calibrando ruido ambiente… Esperá un instante sin hablar.' if capture.calibrating else
+                                   'Voz detectada. Hacé una pausa al terminar…' if capture.speaking else
+                                   'Escucha automática activa. Decí «Aubar» seguido de un comando.')
+
     def _controls(self):
         def enable(widget, allowed):
             widget.configure(state="normal" if allowed else "disabled")
@@ -383,6 +505,7 @@ class AubarApp:
         self.port_combo.configure(state="readonly" if not self.busy and not self.connected else "disabled")
         for button in self.catalog_buttons:
             enable(button, self.connected and not self.busy and self.audio_phase=="idle")
+        self._audio_controls()
 
     def _message(self, text, error=False):
         self.banner_value.set(text)
@@ -435,6 +558,8 @@ class AubarApp:
             self.audio_phase = 'idle'
             self.talk_button.configure(text='Mantené pulsado para hablar')
         self.pending_action = None
+        if self.auto_enabled.get() or self.auto_running:
+            self.stop_automatic('Escucha apagada por desconexión. Reconectá y activala de nuevo.')
         self._audio_controls()
 
     def _dispatch_voice(self):
@@ -448,6 +573,7 @@ class AubarApp:
             self.talk_button.configure(text='Mantené pulsado para hablar')
             self._audio_controls()
             return
+        self.voice_inflight = True
         self._submit('voice', lambda: (token, action, self.session.apply_action(action)))
 
     def refresh_status(self):
@@ -469,6 +595,8 @@ class AubarApp:
             while True:
                 operation, result, error = self.events.get_nowait()
                 self.busy = False
+                if operation=='voice':
+                    self.voice_inflight = False
                 if error:
                     self._invalidate_connection()
                     self.connected = False
@@ -501,12 +629,15 @@ class AubarApp:
                     token, action, status = result
                     if token == self.connection_token and self.connected:
                         self._apply_status(status)
-                        self.recognition_message.set(f'{action.label}. Confirmado por el ESP32.')
                         if operation=='catalog':
                             self.catalog_message.set(f'{action.label}. Confirmado por el ESP32.')
+                        else:
+                            self.recognition_message.set(f'{action.label}. Confirmado por el ESP32.')
                         self._log(f'{action.label}. Confirmado por el ESP32.')
-                    self.audio_phase = 'idle'
-                    self.talk_button.configure(text='Mantené pulsado para hablar')
+                    if operation=='voice':
+                        if self.audio_phase=='sending':
+                            self.audio_phase = 'idle'
+                        self.talk_button.configure(text='Mantené pulsado para hablar')
                     self._audio_controls()
                 elif operation == "disconnect":
                     self.connected = False
@@ -518,6 +649,7 @@ class AubarApp:
         except Empty:
             pass
         self._drain_audio()
+        self._tick_automatic()
         self._dispatch_voice()
         if not self.closed:
             self._events_timer = self.root.after(80, self._drain)
@@ -532,6 +664,9 @@ class AubarApp:
         if self.closed:
             return
         self.closed = True
+        self.auto_enabled.set(False)
+        self.auto_generation += 1
+        self.automatic_capture.cancel()
         self.pending_action = None
         self.capture.cancel()
         self.last_recording = None
@@ -540,6 +675,7 @@ class AubarApp:
         self.executor.submit(self.session.close)
         self.executor.shutdown(wait=False, cancel_futures=False)
         self.audio_executor.submit(self.capture.finish)
+        self.audio_executor.submit(self.automatic_capture.finish)
         self.audio_executor.shutdown(wait=False, cancel_futures=False)
         self.root.destroy()
 

@@ -82,7 +82,7 @@ Una operación del micrófono no bloquea la conexión USB.
 5. Soltar el botón para finalizar. La indicación cambia a **Micrófono apagado**
    y muestra la duración capturada. Las capturas menores de 0,15 s se descartan.
 
-La captura se detiene al perder el foco de la ventana, minimizarla, cerrarla
+La captura manual se detiene al perder el foco de la ventana, minimizarla, cerrarla
 o alcanzar 10 segundos. Al soltar el botón se rechazan inmediatamente nuevas
 muestras, incluso si la apertura del dispositivo todavía está pendiente.
 
@@ -114,7 +114,7 @@ La sección **Lo que escuché** muestra el texto y la acción asociada.
 | «Mirá al centro» | Mirada centrada |
 | «Modo automático» / «Modo manual» | Modo indicado |
 
-Se ignoran mayúsculas, tildes y puntuación. Se acepta «Kirby» al principio
+Se ignoran mayúsculas, tildes y puntuación. Se acepta «Aubar» al principio
 y «por favor» al final. Se admite la separación «dormí te» que puede producir
 el modelo al transcribir el voseo.
 Para la expresión contenta se utiliza solamente «contento», sin «ponete»,
@@ -157,6 +157,47 @@ comprobar el estado y repetir la frase solamente si corresponde.
 Para validar desconexiones: retirar el cable, esperar el aviso del panel,
 volver a conectar y buscar el puerto si cambió. Una frase anterior no debe
 ejecutarse al reconectar. Volver a hablar para enviar una orden nueva.
+
+## Escucha automática con «Aubar»
+
+1. Conectar el ESP32 en **Dispositivo** y elegir la entrada en **Micrófono**.
+2. Activar **Escucha automática · «Aubar» + comando**. Esperar la breve
+   calibración del ruido ambiente sin hablar.
+3. Cuando indique **Escucha automática activa**, decir una frase completa como
+   **«Aubar, contento»**, **«Aubar, celebrar»** o **«Aubar, mirá a la izquierda»**.
+4. Hacer una pausa de **0,8 segundos**: el panel transcribe, comprueba el nombre
+   y el comando, y espera la confirmación del ESP32 antes de volver a escuchar.
+
+No hay que mantener pulsado el botón. En este modo un comando sin «Aubar» no
+actúa. El modo manual sigue disponible al apagar la casilla, y conserva sus
+comandos anteriores sin exigir el nombre.
+
+La escucha automática continúa al cambiar de ventana o minimizar. Se apaga al
+desmarcar la casilla, cerrar el panel o perder la conexión USB. Al reconectar
+hay que activarla nuevamente; no se ejecutan frases pendientes de una conexión
+anterior. Desactivarla también descarta reconocimientos que aún no se enviaron.
+Una orden que ya fue enviada puede terminar de aplicarse.
+
+La detección usa el nivel de audio y conserva hasta 300 ms previos al comienzo
+para no recortar las primeras sílabas. Descarta sonidos breves y frases que
+superen 10 segundos, en vez de actuar sobre una frase truncada. Mientras se
+reconoce o ejecuta una acción se pausa la recepción de nuevas frases. El audio
+se procesa localmente y no se guarda en archivos. Conviene esperar a que el
+panel vuelva a indicar que está escuchando antes de dar otra orden.
+
+El modelo español distribuido no contiene «Aubar» en su diccionario. Para
+verificar el nombre se usa un segundo reconocimiento fonético con «au bar»
+y una opción de palabra desconocida, mientras el comando debe aparecer en
+la transcripción libre con confianza suficiente. No se acepta «ayudar» como
+alias de texto: ese texto puede aparecer en la transcripción de «Aubar», pero
+el audio del nombre se comprueba por separado. Por eso el texto mostrado puede
+diferir del nombre aunque la orden sea válida. Este mecanismo usa la
+[adaptación de vocabulario de Vosk](https://alphacephei.com/vosk/adaptation);
+no modifica ni reemplaza el modelo descargado.
+
+El ruido, las voces de fondo o una pronunciación parecida pueden producir
+errores: la palabra de activación reduce las activaciones involuntarias sin
+eliminarlas por completo. Revisar lo transcrito y la acción confirmada.
 
 ## Modelo local
 
