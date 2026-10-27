@@ -23,7 +23,48 @@ static bool avatarEye(float x, float y, float cx, float cy,
   return dx*dx + dy*dy <= radius*radius;
 }
 
-static uint16_t avatarPixel(int screenX, int screenY, float openness) {
+static bool avatarExpressionEye(float x, float y, float cx,
+                                const AvatarEye& eye, float openness) {
+  float angle = eye.angle * 0.01745329252f;
+  float dx = x - cx - eye.x;
+  float dy = y - 34.0f - eye.y;
+  float u = dx * cosf(angle) + dy * sinf(angle);
+  float v = -dx * sinf(angle) + dy * cosf(angle);
+  return avatarEye(u, v, 0, 0, eye.width,
+                   fmaxf(5.0f, eye.height * openness));
+}
+
+// Keep the whole rotated eye rectangle inside the primary body ellipse.
+// This is deliberately stricter than clipping pixels to the body silhouette:
+// wide eyes must remain fully visible when the character looks sideways.
+static float avatarGazeOffset(const AvatarExpression& expression, float requested) {
+  float minimum = -AVATAR_WIDTH;
+  float maximum = AVATAR_WIDTH;
+  const AvatarEye eyes[] = {expression.left, expression.right};
+  const float centers[] = {-(expression.spacing + expression.left.width) * 0.5f,
+                           (expression.spacing + expression.right.width) * 0.5f};
+  for (int i = 0; i < 2; ++i) {
+    const auto& eye = eyes[i];
+    float angle = eye.angle * 0.01745329252f;
+    float halfWidth = (fabsf(cosf(angle)) * eye.width +
+                       fabsf(sinf(angle)) * fmaxf(5.0f, eye.height)) * 0.5f;
+    float halfHeight = (fabsf(sinf(angle)) * eye.width +
+                        fabsf(cosf(angle)) * fmaxf(5.0f, eye.height)) * 0.5f;
+    float furthestY = fabsf(34.0f + eye.y) + halfHeight;
+    float normalizedY = furthestY / (AVATAR_HEIGHT * 0.5f);
+    float availableX = AVATAR_WIDTH * 0.5f *
+                        sqrtf(fmaxf(0.0f, 1.0f - normalizedY * normalizedY)) - 2.0f;
+    float center = centers[i] + eye.x;
+    minimum = fmaxf(minimum, -availableX + halfWidth - center);
+    maximum = fminf(maximum, availableX - halfWidth - center);
+  }
+  if (minimum > maximum) return 0;
+  return fminf(maximum, fmaxf(minimum, requested));
+}
+
+static uint16_t avatarPixel(int screenX, int screenY,
+                            const AvatarExpression& expression, float openness,
+                            float gazeOffset = 0.0f) {
   // Fit the entire avatar, including its arms, into the narrow screen.
   constexpr float scale = 0.48f;
   float x = (screenX - 86.0f) / scale;
@@ -35,13 +76,10 @@ static uint16_t avatarPixel(int screenX, int screenY, float openness) {
   }
   if (!body) return AVATAR_BACKGROUND;
   // Eye spacing is the gap between the two eye shapes.
-  float leftX = -(AVATAR_EYE_GAP + AVATAR_LEFT_WIDTH) * 0.5f;
-  float rightX = (AVATAR_EYE_GAP + AVATAR_RIGHT_WIDTH) * 0.5f;
-  constexpr float faceY = 34.0f;
-  if (avatarEye(x, y, leftX, faceY + AVATAR_LEFT_Y, AVATAR_LEFT_WIDTH,
-                fmaxf(5.0f, AVATAR_LEFT_HEIGHT * openness)) ||
-      avatarEye(x, y, rightX, faceY + AVATAR_RIGHT_Y, AVATAR_RIGHT_WIDTH,
-                fmaxf(5.0f, AVATAR_RIGHT_HEIGHT * openness))) {
+  float leftX = -(expression.spacing + expression.left.width) * 0.5f;
+  float rightX = (expression.spacing + expression.right.width) * 0.5f;
+  if (avatarExpressionEye(x, y, leftX + gazeOffset, expression.left, openness) ||
+      avatarExpressionEye(x, y, rightX + gazeOffset, expression.right, openness)) {
     return AVATAR_EYES;
   }
   return AVATAR_BODY;

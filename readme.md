@@ -1,12 +1,192 @@
 # Aubar Bot
 
 Bot de escritorio en desarrollo, con un avatar de Kirby en una pantalla
-Waveshare ESP32-S3-LCD-1.47B. La primera versión muestra el personaje centrado
-y ejecuta un parpadeo automático.
+Waveshare ESP32-S3-LCD-1.47B. Reproduce 28 expresiones y 23 animaciones,
+con parpadeo, miradas y control por voz desde el micrófono de la PC.
 
 El firmware funciona de forma autónoma después de cargarlo: basta con alimentar
-la placa por USB. La conversación por voz y el control desde la PC son
-funcionalidades previstas para próximas versiones.
+la placa por USB. Para controlarlo por voz se utiliza el panel de la PC;
+la conversación libre sigue siendo una funcionalidad pendiente.
+
+## Comandos de voz aislados
+
+Para usar la voz, abrir el [panel de PC](docs/herramienta-pc.md), conectar el
+ESP32 y seleccionar el micrófono. En **escucha automática**, activar la casilla,
+esperar la calibración y decir **«Aubar» + comando**. Una pausa de **0,8 segundos**
+termina la frase. En captura manual se puede omitir «Aubar».
+
+Se ignoran mayúsculas, tildes y puntuación. El panel muestra lo reconocido y
+la confirmación del ESP32. Los siguientes comandos seleccionan una sola acción.
+
+### Expresiones fijas — 28
+
+| Expresión | Comando de voz |
+| --- | --- |
+| Neutral | «Aubar, neutral» |
+| Contento | «Aubar, contento» |
+| Sorprendido | «Aubar, sorprendido» |
+| Dormido | «Aubar, dormido» |
+| Enojado | «Aubar, enojado» |
+| Mirada lateral arriba | «Aubar, expresión mirada lateral arriba» |
+| Mirada abajo | «Aubar, expresión mirada abajo» |
+| Escéptico derecha | «Aubar, expresión escéptico derecha» |
+| Atento pequeño | «Aubar, expresión atento pequeño» |
+| Mirada amplia abajo | «Aubar, expresión mirada amplia abajo» |
+| Sorpresa izquierda | «Aubar, expresión sorpresa izquierda» |
+| Somnoliento | «Aubar, expresión somnoliento» |
+| Curioso izquierda | «Aubar, expresión curioso izquierda» |
+| Asimétrico abajo derecha | «Aubar, expresión asimétrico abajo derecha» |
+| Atento izquierda | «Aubar, expresión atento izquierda» |
+| Alegre abajo derecha | «Aubar, expresión alegre abajo derecha» |
+| Escéptico izquierda | «Aubar, expresión escéptico izquierda» |
+| Mirada derecha | «Aubar, expresión mirada derecha» |
+| Enojado izquierda | «Aubar, expresión enojado izquierda» |
+| Juguetón derecha | «Aubar, expresión juguetón derecha» |
+| Asimétrico arriba izquierda | «Aubar, expresión asimétrico arriba izquierda» |
+| Mirada suave abajo | «Aubar, expresión mirada suave abajo» |
+| Mirada amplia abajo izquierda | «Aubar, expresión mirada amplia abajo izquierda» |
+| Adormilado | «Aubar, expresión adormilado» |
+| Sospechoso derecha | «Aubar, expresión sospechoso derecha» |
+| Tímido | «Aubar, expresión tímido» |
+| Cejas enojadas | «Aubar, expresión cejas enojadas» |
+| Inquieto izquierda | «Aubar, expresión inquieto izquierda» |
+
+También se aceptan **«Aubar, dormite»**, **«Aubar, duerme»** y **«Aubar, a dormir»**
+para la expresión dormida. Para contento, usar **«Aubar, contento»**.
+El prefijo «expresión» también se puede usar con las cinco expresiones básicas.
+
+### Animaciones en bucle — 23
+
+| Animación | Comando de voz |
+| --- | --- |
+| Dormir | «Aubar, dormir» |
+| Despertar | «Aubar, despertar» |
+| Reposo | «Aubar, reposo» |
+| Escuchar | «Aubar, escuchar» |
+| Pensar | «Aubar, pensar» |
+| Buscar | «Aubar, buscar» |
+| Trabajar | «Aubar, trabajar» |
+| Entusiasmarse | «Aubar, entusiasmarse» |
+| Aburrirse | «Aubar, aburrirse» |
+| Sospechar | «Aubar, sospechar» |
+| Enojarse | «Aubar, enojarse» |
+| Adormecerse | «Aubar, adormecerse» |
+| Alegría | «Aubar, alegría» |
+| Curiosear | «Aubar, curiosear» |
+| Confundirse | «Aubar, confundirse» |
+| Sorprenderse | «Aubar, sorprenderse» |
+| Orgullo | «Aubar, orgullo» |
+| Timidez | «Aubar, timidez» |
+| Tristeza | «Aubar, tristeza» |
+| Reír | «Aubar, reír» |
+| Asustarse | «Aubar, asustarse» |
+| Jugar | «Aubar, jugar» |
+| Celebrar | «Aubar, celebrar» |
+
+También se acepta «animación» antes del nombre: **«Aubar, animación celebrar»**.
+**«Aubar, dormido»** elige una pose fija; **«Aubar, dormir»** reproduce la
+animación de sueño.
+
+### Miradas y modos
+
+| Acción | Comando de voz |
+| --- | --- |
+| Mirar a la izquierda | «Aubar, izquierda» o «Aubar, mirá a la izquierda» |
+| Mirar al centro | «Aubar, centro» o «Aubar, mirá al centro» |
+| Mirar a la derecha | «Aubar, derecha» o «Aubar, mirá a la derecha» |
+| Recorrer automáticamente todas las animaciones | «Aubar, modo automático» |
+| Detener la secuencia en la expresión actual | «Aubar, modo manual» |
+
+Una mirada aislada conserva la animación que se esté reproduciendo.
+El modo automático restaura las orientaciones originales del catálogo.
+
+## Comandos de voz combinados
+
+Combinar **una expresión o una animación** con **izquierda, centro o derecha**.
+Hay **153 combinaciones**: 28 expresiones × 3 miradas y 23 animaciones × 3 miradas.
+
+Ejemplos: **«Aubar, enojado derecha»**, **«Aubar, celebrar izquierda»** y
+**«Aubar, pensar centro»**. También se acepta **«Aubar, enojado mirando a la
+derecha»** o **«Aubar, celebrar y izquierda»**.
+
+La combinación se aplica en una sola orden y la mirada se mantiene durante
+los pasos de la animación y las selecciones siguientes. **«Aubar, centro»**
+la centra; **«Aubar, modo automático»** recupera las orientaciones originales.
+Los ojos dormidos siguen cerrados y también pueden orientarse.
+
+Los combinados requieren el firmware con **protocolo USB v4**. Para los nombres
+de expresiones que ya incluyen una dirección se usa «expresión» y «mirando»,
+como en la lista, para distinguir el nombre de la pose de la mirada solicitada.
+
+<details>
+<summary>Lista completa: expresiones con mirada — 84 combinaciones</summary>
+
+| Expresión | Comandos combinados |
+| --- | --- |
+| Neutral | «Aubar, neutral izquierda»<br>«Aubar, neutral centro»<br>«Aubar, neutral derecha» |
+| Contento | «Aubar, contento izquierda»<br>«Aubar, contento centro»<br>«Aubar, contento derecha» |
+| Sorprendido | «Aubar, sorprendido izquierda»<br>«Aubar, sorprendido centro»<br>«Aubar, sorprendido derecha» |
+| Dormido | «Aubar, dormido izquierda»<br>«Aubar, dormido centro»<br>«Aubar, dormido derecha» |
+| Enojado | «Aubar, enojado izquierda»<br>«Aubar, enojado centro»<br>«Aubar, enojado derecha» |
+| Mirada lateral arriba | «Aubar, expresión mirada lateral arriba mirando a la izquierda»<br>«Aubar, expresión mirada lateral arriba mirando al centro»<br>«Aubar, expresión mirada lateral arriba mirando a la derecha» |
+| Mirada abajo | «Aubar, expresión mirada abajo mirando a la izquierda»<br>«Aubar, expresión mirada abajo mirando al centro»<br>«Aubar, expresión mirada abajo mirando a la derecha» |
+| Escéptico derecha | «Aubar, expresión escéptico derecha mirando a la izquierda»<br>«Aubar, expresión escéptico derecha mirando al centro»<br>«Aubar, expresión escéptico derecha mirando a la derecha» |
+| Atento pequeño | «Aubar, expresión atento pequeño mirando a la izquierda»<br>«Aubar, expresión atento pequeño mirando al centro»<br>«Aubar, expresión atento pequeño mirando a la derecha» |
+| Mirada amplia abajo | «Aubar, expresión mirada amplia abajo mirando a la izquierda»<br>«Aubar, expresión mirada amplia abajo mirando al centro»<br>«Aubar, expresión mirada amplia abajo mirando a la derecha» |
+| Sorpresa izquierda | «Aubar, expresión sorpresa izquierda mirando a la izquierda»<br>«Aubar, expresión sorpresa izquierda mirando al centro»<br>«Aubar, expresión sorpresa izquierda mirando a la derecha» |
+| Somnoliento | «Aubar, expresión somnoliento mirando a la izquierda»<br>«Aubar, expresión somnoliento mirando al centro»<br>«Aubar, expresión somnoliento mirando a la derecha» |
+| Curioso izquierda | «Aubar, expresión curioso izquierda mirando a la izquierda»<br>«Aubar, expresión curioso izquierda mirando al centro»<br>«Aubar, expresión curioso izquierda mirando a la derecha» |
+| Asimétrico abajo derecha | «Aubar, expresión asimétrico abajo derecha mirando a la izquierda»<br>«Aubar, expresión asimétrico abajo derecha mirando al centro»<br>«Aubar, expresión asimétrico abajo derecha mirando a la derecha» |
+| Atento izquierda | «Aubar, expresión atento izquierda mirando a la izquierda»<br>«Aubar, expresión atento izquierda mirando al centro»<br>«Aubar, expresión atento izquierda mirando a la derecha» |
+| Alegre abajo derecha | «Aubar, expresión alegre abajo derecha mirando a la izquierda»<br>«Aubar, expresión alegre abajo derecha mirando al centro»<br>«Aubar, expresión alegre abajo derecha mirando a la derecha» |
+| Escéptico izquierda | «Aubar, expresión escéptico izquierda mirando a la izquierda»<br>«Aubar, expresión escéptico izquierda mirando al centro»<br>«Aubar, expresión escéptico izquierda mirando a la derecha» |
+| Mirada derecha | «Aubar, expresión mirada derecha mirando a la izquierda»<br>«Aubar, expresión mirada derecha mirando al centro»<br>«Aubar, expresión mirada derecha mirando a la derecha» |
+| Enojado izquierda | «Aubar, expresión enojado izquierda mirando a la izquierda»<br>«Aubar, expresión enojado izquierda mirando al centro»<br>«Aubar, expresión enojado izquierda mirando a la derecha» |
+| Juguetón derecha | «Aubar, expresión juguetón derecha mirando a la izquierda»<br>«Aubar, expresión juguetón derecha mirando al centro»<br>«Aubar, expresión juguetón derecha mirando a la derecha» |
+| Asimétrico arriba izquierda | «Aubar, expresión asimétrico arriba izquierda mirando a la izquierda»<br>«Aubar, expresión asimétrico arriba izquierda mirando al centro»<br>«Aubar, expresión asimétrico arriba izquierda mirando a la derecha» |
+| Mirada suave abajo | «Aubar, expresión mirada suave abajo mirando a la izquierda»<br>«Aubar, expresión mirada suave abajo mirando al centro»<br>«Aubar, expresión mirada suave abajo mirando a la derecha» |
+| Mirada amplia abajo izquierda | «Aubar, expresión mirada amplia abajo izquierda mirando a la izquierda»<br>«Aubar, expresión mirada amplia abajo izquierda mirando al centro»<br>«Aubar, expresión mirada amplia abajo izquierda mirando a la derecha» |
+| Adormilado | «Aubar, expresión adormilado mirando a la izquierda»<br>«Aubar, expresión adormilado mirando al centro»<br>«Aubar, expresión adormilado mirando a la derecha» |
+| Sospechoso derecha | «Aubar, expresión sospechoso derecha mirando a la izquierda»<br>«Aubar, expresión sospechoso derecha mirando al centro»<br>«Aubar, expresión sospechoso derecha mirando a la derecha» |
+| Tímido | «Aubar, expresión tímido mirando a la izquierda»<br>«Aubar, expresión tímido mirando al centro»<br>«Aubar, expresión tímido mirando a la derecha» |
+| Cejas enojadas | «Aubar, expresión cejas enojadas mirando a la izquierda»<br>«Aubar, expresión cejas enojadas mirando al centro»<br>«Aubar, expresión cejas enojadas mirando a la derecha» |
+| Inquieto izquierda | «Aubar, expresión inquieto izquierda mirando a la izquierda»<br>«Aubar, expresión inquieto izquierda mirando al centro»<br>«Aubar, expresión inquieto izquierda mirando a la derecha» |
+
+</details>
+
+<details>
+<summary>Lista completa: animaciones con mirada — 69 combinaciones</summary>
+
+| Animación | Comandos combinados |
+| --- | --- |
+| Dormir | «Aubar, dormir izquierda»<br>«Aubar, dormir centro»<br>«Aubar, dormir derecha» |
+| Despertar | «Aubar, despertar izquierda»<br>«Aubar, despertar centro»<br>«Aubar, despertar derecha» |
+| Reposo | «Aubar, reposo izquierda»<br>«Aubar, reposo centro»<br>«Aubar, reposo derecha» |
+| Escuchar | «Aubar, escuchar izquierda»<br>«Aubar, escuchar centro»<br>«Aubar, escuchar derecha» |
+| Pensar | «Aubar, pensar izquierda»<br>«Aubar, pensar centro»<br>«Aubar, pensar derecha» |
+| Buscar | «Aubar, buscar izquierda»<br>«Aubar, buscar centro»<br>«Aubar, buscar derecha» |
+| Trabajar | «Aubar, trabajar izquierda»<br>«Aubar, trabajar centro»<br>«Aubar, trabajar derecha» |
+| Entusiasmarse | «Aubar, entusiasmarse izquierda»<br>«Aubar, entusiasmarse centro»<br>«Aubar, entusiasmarse derecha» |
+| Aburrirse | «Aubar, aburrirse izquierda»<br>«Aubar, aburrirse centro»<br>«Aubar, aburrirse derecha» |
+| Sospechar | «Aubar, sospechar izquierda»<br>«Aubar, sospechar centro»<br>«Aubar, sospechar derecha» |
+| Enojarse | «Aubar, enojarse izquierda»<br>«Aubar, enojarse centro»<br>«Aubar, enojarse derecha» |
+| Adormecerse | «Aubar, adormecerse izquierda»<br>«Aubar, adormecerse centro»<br>«Aubar, adormecerse derecha» |
+| Alegría | «Aubar, alegría izquierda»<br>«Aubar, alegría centro»<br>«Aubar, alegría derecha» |
+| Curiosear | «Aubar, curiosear izquierda»<br>«Aubar, curiosear centro»<br>«Aubar, curiosear derecha» |
+| Confundirse | «Aubar, confundirse izquierda»<br>«Aubar, confundirse centro»<br>«Aubar, confundirse derecha» |
+| Sorprenderse | «Aubar, sorprenderse izquierda»<br>«Aubar, sorprenderse centro»<br>«Aubar, sorprenderse derecha» |
+| Orgullo | «Aubar, orgullo izquierda»<br>«Aubar, orgullo centro»<br>«Aubar, orgullo derecha» |
+| Timidez | «Aubar, timidez izquierda»<br>«Aubar, timidez centro»<br>«Aubar, timidez derecha» |
+| Tristeza | «Aubar, tristeza izquierda»<br>«Aubar, tristeza centro»<br>«Aubar, tristeza derecha» |
+| Reír | «Aubar, reír izquierda»<br>«Aubar, reír centro»<br>«Aubar, reír derecha» |
+| Asustarse | «Aubar, asustarse izquierda»<br>«Aubar, asustarse centro»<br>«Aubar, asustarse derecha» |
+| Jugar | «Aubar, jugar izquierda»<br>«Aubar, jugar centro»<br>«Aubar, jugar derecha» |
+| Celebrar | «Aubar, celebrar izquierda»<br>«Aubar, celebrar centro»<br>«Aubar, celebrar derecha» |
+
+</details>
+
+Más detalles de uso en la [guía del panel](docs/herramienta-pc.md) y el
+[catálogo del avatar](docs/catalogo-avatar.md).
 
 ## Requisitos
 
@@ -30,7 +210,7 @@ y [página del producto](https://www.waveshare.com/esp32-s3-lcd-1.47b.htm).
 | **Arduino IDE** | Versión 2; editor, compilación y carga por USB | [Descarga oficial](https://www.arduino.cc/en/software/) |
 | **esp32 by Espressif Systems** | **3.3.8**, versión utilizada para validar este proyecto; incluye el compilador, Arduino y SPI para ESP32 | [Instalación oficial](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html) |
 | **Arduino CLI** — opcional | Permite compilar y cargar desde la terminal | [Documentación oficial](https://docs.arduino.cc/arduino-cli/) |
-| **Python 3** — opcional | Solo para regenerar los datos del avatar al modificar su definición | [Descarga oficial](https://www.python.org/downloads/) |
+| **Python 3.11 o superior** | Para el panel de PC y los comandos de voz; también permite regenerar los datos del avatar | [Descarga oficial](https://www.python.org/downloads/) |
 
 Se necesita internet para descargar las herramientas y el paquete ESP32.
 El firmware actual no requiere conexión a internet, microSD, micrófono,
@@ -42,10 +222,10 @@ El personaje se creó y exportó con [Bible Strong Avatar Lab](https://avatars.b
 La exportación original está incluida en [avatar-original/](avatar-original/),
 junto con su demo web e instrucciones.
 
-Esta versión adapta las formas, dimensiones y colores del personaje a un dibujo
-frontal 2D para el ESP32. El parpadeo se implementa en el firmware.
-La exportación original contiene 23 animaciones y 28 expresiones para el motor
-web; esas animaciones y perspectivas todavía no están implementadas en la placa.
+Esta versión adapta las formas, dimensiones, colores y poses del personaje
+a una proyección ortográfica para el ESP32. Las 28 expresiones y las 23
+animaciones de la exportación están incorporadas, con un reproductor local
+que conserva sus pasos y tiempos. La adaptación no ejecuta el motor web original.
 
 Los datos necesarios ya están incluidos en `avatar_data.h`. Para compilar este
 proyecto no hace falta abrir Avatar Lab, volver a exportar el personaje ni
@@ -80,7 +260,7 @@ No hay que instalar bibliotecas adicionales para esta versión.
 ### 3. Abrir y configurar el firmware
 
 Abrir [firmware/KirbyPantalla/KirbyPantalla.ino](firmware/KirbyPantalla/KirbyPantalla.ino)
-en Arduino IDE. Mantener juntos los cinco archivos de la carpeta
+en Arduino IDE. Mantener juntos todos los archivos de la carpeta
 `KirbyPantalla` y conservar su nombre.
 
 En **Herramientas > Placa > esp32**, seleccionar **ESP32S3 Dev Module**.
@@ -117,7 +297,7 @@ el avatar vuelve a arrancar cada vez que la placa recibe alimentación.
 | No aparece un puerto al conectar | Usar un cable de datos y probar otro puerto USB |
 | No entra en modo de carga | Mantener **BOOT**, pulsar y soltar **RESET**, y después soltar **BOOT**; volver a seleccionar el puerto |
 | Puerto ocupado | Cerrar el monitor serie u otros programas que usen ese puerto |
-| La compilación no encuentra los archivos del proyecto | Abrir el `.ino` desde la carpeta extraída y mantener juntos los cinco archivos de `KirbyPantalla` |
+| La compilación no encuentra los archivos del proyecto | Abrir el `.ino` desde la carpeta extraída y mantener juntos todos los archivos de `KirbyPantalla` |
 | Opciones de placa diferentes | Seleccionar **ESP32S3 Dev Module** del paquete **esp32 by Espressif Systems 3.3.8** |
 
 ## Carga desde la terminal — opcional
@@ -164,7 +344,7 @@ docs/images/             Imágenes de documentación y notas de edición
 readme.md                Requisitos e instrucciones del proyecto
 ```
 
-Los cinco archivos de `firmware/KirbyPantalla/` contienen lo necesario para
+Los archivos de `firmware/KirbyPantalla/` contienen lo necesario para
 compilar y cargar esta versión. Los archivos compilados se generan localmente.
 
 La carpeta `referencias/`, excluida de Git, contiene los ejemplos completos
@@ -184,7 +364,8 @@ python tools/generate_avatar_data.py
 
 El generador usa la biblioteca estándar de Python. Después de regenerar los
 datos, compilar y cargar nuevamente el firmware. El generador adapta la
-geometría frontal y la expresión neutral; no convierte el motor de animaciones web.
+geometría, las 28 expresiones y los pasos de las 23 animaciones para el reproductor
+local; no convierte el motor de animaciones web.
 
 ## Imágenes del prototipo
 
