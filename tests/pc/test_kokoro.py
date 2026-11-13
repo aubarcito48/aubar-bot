@@ -50,7 +50,7 @@ class KokoroAdapterTests(unittest.TestCase):
 
 
 class KokoroWorkerTests(unittest.TestCase):
-    def test_local_synthesis_uses_native_onyx_applies_volume_and_closes_output(self):
+    def test_local_synthesis_uses_spanish_onyx_applies_volume_and_closes_output(self):
         with tempfile.TemporaryDirectory() as temp:
             directory=Path(temp)
             (directory/'model').write_bytes(b'm')
@@ -68,7 +68,7 @@ class KokoroWorkerTests(unittest.TestCase):
                 samples.__mul__=Mock(return_value='scaled samples')
                 request=dict(action='speak',text='Estoy contento.',volume=30,rate=0)
                 self.assertEqual(kokoro_speech.execute(request),{'ok':True,'voice':VOICE})
-                model.create.assert_called_once_with('Estoy contento.',voice='am_onyx',speed=1.0,lang='en-us')
+                model.create.assert_called_once_with('Estoy contento.',voice='am_onyx',speed=1.08,lang='es-419')
                 samples.__mul__.assert_called_once_with(.3)
                 audio.play.assert_called_once_with('scaled samples',24000)
                 audio.wait.assert_called_once()

@@ -57,9 +57,13 @@ automáticamente las próximas respuestas. **Escuchar respuesta** reproduce la
 última respuesta recibida y **Detener voz** interrumpe la lectura. El chat y la
 voz pueden usarse sin conectar el ESP32; la placa agrega la expresión visual.
 
-La voz elegida es **`am_onyx`**, con su pronunciación inglesa original y velocidad
-base 1.0. Esta primera prueba no adapta la pronunciación del texto español; esa
-adaptación queda pendiente. Para cargar el cambio, cerrar y volver a abrir el panel.
+La voz elegida sigue siendo **`am_onyx`**. Usa fonética de español latinoamericano
+o inglés según las palabras del texto, con velocidad base 1.08 para un ritmo
+ligeramente más ágil. La selección de idioma es una heurística: frases cortas
+o ambiguas vuelven al español y los textos mezclados usan un solo idioma.
+El chat responde por defecto con voseo argentino, o en inglés si se lo pedís.
+Esto aproxima la forma de hablar; no es una voz entrenada con acento cordobés
+ni ofrece control emocional. Para cargar el cambio, cerrar y volver a abrir el panel.
 
 | Acción | Ejemplo de voz |
 | --- | --- |

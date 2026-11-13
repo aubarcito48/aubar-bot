@@ -9,6 +9,7 @@ import sys
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from pc.aubar_control.tts_assets import ASSETS, MODEL_DIR, VOICE
+from pc.aubar_control.speech_pronunciation import pronunciation_language, speech_speed
 
 
 def execute(request):
@@ -34,7 +35,7 @@ def execute(request):
     with redirect_stdout(sys.stderr):
         engine=Kokoro(str(MODEL_DIR/ASSETS[0][0]),str(MODEL_DIR/ASSETS[1][0]))
         samples,sample_rate=engine.create(text,voice=VOICE['id'],
-            speed=max(.5,min(2.0,2**(rate/10))),lang=VOICE['language'])
+            speed=speech_speed(rate),lang=pronunciation_language(text))
         try:
             sd.play(samples*(volume/100),sample_rate)
             sd.wait()
