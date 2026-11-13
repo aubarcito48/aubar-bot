@@ -1,8 +1,13 @@
 # Aubar Bot
 
-Bot de escritorio en desarrollo, con un avatar de Kirby en una pantalla
-Waveshare ESP32-S3-LCD-1.47B. Reproduce 28 expresiones y 23 animaciones,
-con parpadeo, miradas y control por voz desde el micrófono de la PC.
+Bot de escritorio en desarrollo, con el retrato animado de Nahuel en una pantalla
+Waveshare ESP32-S3-LCD-1.47B. Usa los cuadros de dos videos y seis poses estáticas,
+con miradas y control por voz desde el micrófono de la PC.
+
+Se mantienen los 28 identificadores de expresión y las 23 animaciones del panel.
+Las emociones sin imagen propia usan equivalencias temporales, por lo que todavía
+no son 28 expresiones visualmente distintas. Ver [el firmware del retrato](newAUBAR/FIRMWARE_AVATAR.md)
+para los recursos, las equivalencias, la compilación y la verificación en placa.
 
 El firmware funciona de forma autónoma después de cargarlo: basta con alimentar
 la placa por USB. Para controlarlo por voz se utiliza el panel de la PC;
@@ -270,16 +275,19 @@ El personaje se creó y exportó con [Bible Strong Avatar Lab](https://avatars.b
 La exportación original está incluida en [avatar-original/](avatar-original/),
 junto con su demo web e instrucciones.
 
-Esta versión adapta las formas, dimensiones, colores y poses del personaje
-a una proyección ortográfica para el ESP32. Las 28 expresiones y las 23
-animaciones de la exportación están incorporadas, con un reproductor local
-que conserva sus pasos y tiempos. La adaptación no ejecuta el motor web original.
+El renderizador geométrico anterior se conserva como referencia. El firmware
+actual dibuja el retrato con sus videos y poses, manteniendo los identificadores
+y tiempos del catálogo para la comunicación con el panel.
 
-Los datos necesarios ya están incluidos en `avatar_data.h`. Para compilar este
-proyecto no hace falta abrir Avatar Lab, volver a exportar el personaje ni
-instalar React, Angular, Node.js o npm.
+El banco de imágenes se incluye en `portrait_assets.dat`. Si se mueve o descarga
+el proyecto en otra ruta, ejecutar `python tools/generate_portrait_firmware.py --refresh-path`
+para actualizar la ruta local sin regenerar imágenes. Ver [las instrucciones del retrato](newAUBAR/FIRMWARE_AVATAR.md).
 
 ## Instalación y carga
+
+Para el retrato actual, usar la [compilación por CLI con aplicación de 12 MiB](newAUBAR/FIRMWARE_AVATAR.md#compilar-y-cargar).
+Las indicaciones de Arduino IDE siguientes corresponden a la configuración del
+prototipo geométrico anterior.
 
 ### 1. Obtener el proyecto
 
@@ -357,7 +365,7 @@ Desde la raíz del proyecto, con `arduino-cli` disponible en PATH:
 
 ```powershell
 arduino-cli board list
-arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --upload --port COM3 firmware/KirbyPantalla
+arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --upload --port COM3 firmware/KirbyPantalla
 ```
 
 Reemplazar `COM3` por el puerto detectado. Para compilar sin cargar, quitar
@@ -370,7 +378,7 @@ puede ejecutarse desde PowerShell de esta manera:
 $kirbyCli = "$env:LOCALAPPDATA\Programs\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe"
 $kirbyConfig = "$env:USERPROFILE\.arduinoIDE\arduino-cli.yaml"
 & $kirbyCli --config-file $kirbyConfig board list
-& $kirbyCli --config-file $kirbyConfig compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --upload --port COM3 firmware/KirbyPantalla
+& $kirbyCli --config-file $kirbyConfig compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --upload --port COM3 firmware/KirbyPantalla
 ```
 
 La ubicación de la CLI puede variar según la instalación. Usar Arduino IDE
@@ -404,6 +412,9 @@ descargados de Waveshare. El controlador usado está incluido en
 Las cachés, los temporales y las dependencias locales también se excluyen de Git.
 
 ## Modificar los datos del avatar — opcional
+
+Esta sección conserva el generador del catálogo geométrico. Para cambiar las
+imágenes del retrato, usar `tools/generate_portrait_firmware.py`.
 
 Para regenerar `avatar_data.h` desde
 `avatar-original/kirby.avatar.json`, instalar Python 3 y ejecutar desde

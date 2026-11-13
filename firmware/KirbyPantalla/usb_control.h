@@ -3,10 +3,12 @@
 #include "usb_protocol.h"
 #include "avatar_data.h"
 #include "avatar_controller.h"
+#include "portrait_diagnostics.h"
 
 class UsbControl {
  public:
   const UsbCommand& command() const { return protocol_.command(); }
+  void setPortraitDiagnostics(const PortraitDiagnostics* diagnostics) { portrait_=diagnostics; }
 
   // Stream-like interface also permits testing with a bounded fake serial port.
   // Apply one typed command before acknowledging it. The animation loop still
@@ -62,6 +64,15 @@ class UsbControl {
       switch (cmd.type) {
         case UsbCommandType::Ping:
           snprintf(response_, sizeof(response_), "OK PONG 4\n"); break;
+        case UsbCommandType::Portrait:
+          if(!portrait_) snprintf(response_,sizeof(response_),"OK PORTRAIT ready=0\n");
+          else snprintf(response_,sizeof(response_),
+            "OK PORTRAIT ready=%u frame=%u drawn=%lu errors=%lu checksum=%lu max_us=%lu psram=%lu\n",
+            portrait_->ready,portrait_->frame,
+            static_cast<unsigned long>(portrait_->drawn),static_cast<unsigned long>(portrait_->errors),
+            static_cast<unsigned long>(portrait_->checksum),static_cast<unsigned long>(portrait_->maxFrameUs),
+            static_cast<unsigned long>(portrait_->psramBytes));
+          break;
         case UsbCommandType::Status:
           snprintf(response_, sizeof(response_), "OK STATUS mode=%s expression=%s look=%s animation=%s\n",
                    controller.mode() == UsbMode::Manual ? "manual" : "auto",
@@ -99,4 +110,5 @@ class UsbControl {
   size_t responseLength_ = 0;
   size_t sent_ = 0;
   int txCapacity_ = 0;
+  const PortraitDiagnostics* portrait_=nullptr;
 };

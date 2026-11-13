@@ -3,7 +3,7 @@
 #include <string.h>
 #include "animation_data.h"
 
-enum class UsbCommandType { Ping, Status, Expression, Look, Mode, Animation };
+enum class UsbCommandType { Ping, Status, Expression, Look, Mode, Animation, Portrait };
 enum class UsbLook { Left, Center, Right };
 enum class UsbMode { Manual, Auto };
 enum class UsbParseResult { Incomplete, Valid, Empty, UnknownCommand, InvalidArgument,
@@ -65,6 +65,9 @@ class UsbProtocol {
     if (strcmp(buffer_, "PING") == 0) {
       if (argument) return UsbParseResult::InvalidArgument;
       parsed.type = UsbCommandType::Ping;
+    } else if (strcmp(buffer_, "PORTRAIT") == 0) {
+      if (argument) return UsbParseResult::InvalidArgument;
+      parsed.type = UsbCommandType::Portrait;
     } else if (strcmp(buffer_, "STATUS") == 0) {
       if (argument) return UsbParseResult::InvalidArgument;
       parsed.type = UsbCommandType::Status;

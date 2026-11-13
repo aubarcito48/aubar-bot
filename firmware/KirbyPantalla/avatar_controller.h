@@ -11,6 +11,7 @@ class AvatarController {
   constexpr AvatarAnimationId animation() const { return player_.id(); }
   constexpr uint32_t poseVersion() const { return poseVersion_; }
   constexpr uint32_t transitionMs() const { return transitionMs_; }
+  constexpr bool hasLookOverride() const { return lookOverride_; }
   constexpr float openness() const { return openness_; }
   constexpr AvatarExpression pose() const {
     AvatarExpression result=avatar_.expression();
@@ -50,7 +51,7 @@ class AvatarController {
   }
   constexpr void apply(const UsbCommand& command,uint32_t now) {
     switch(command.type) {
-      case UsbCommandType::Ping: case UsbCommandType::Status: break;
+      case UsbCommandType::Ping: case UsbCommandType::Status: case UsbCommandType::Portrait: break;
       case UsbCommandType::Animation:
         if (command.animation>=AvatarAnimationId::Count) break;
         enterManual(); startAnimation(command.animation,now); break;

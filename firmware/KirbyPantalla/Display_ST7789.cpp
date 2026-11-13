@@ -79,7 +79,10 @@ void LCD_Init(void)
 
   LCD_WriteCommand(0xB0);
   LCD_WriteData(0x00);
-  LCD_WriteData(0xE8);
+  // RAMCTRL D3=0: MSB-first RGB565. The renderer already byte-swaps its
+  // uint16_t buffer for SPI; 0xE8 enabled a second swap inside the panel,
+  // turning dark backgrounds pink and corrupting the portrait colors.
+  LCD_WriteData(0xE0);
   
   LCD_WriteCommand(0xB2);
   LCD_WriteData(0x0C);

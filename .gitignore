@@ -39,3 +39,18 @@ Desktop.ini
 *.tmp
 *.swp
 *~
+
+# AUBAR: sources are the supplied videos and optimized WebP stills.
+# Keep authoring duplicates, decoded PNGs and reproducible frame exports local.
+/newAUBAR/revision-video/
+/newAUBAR/animaciones-original/formato jfif/
+/newAUBAR/animaciones-sin-fondo/formato png/
+/newAUBAR/nahue_pick.png
+/newAUBAR/frames-preparados/*/con-fondo/
+/newAUBAR/frames-preparados/*/sin-fondo/
+/newAUBAR/frames-preparados/*/atlas.webp
+/newAUBAR/frames-preparados/*/neutral.webp
+/newAUBAR/frames-preparados/*/vista-previa.webp
+/newAUBAR/frames-preparados/poses-estaticas.webp
+/newAUBAR/frames-preparados/firmware/asset-map.json
+/firmware/KirbyPantalla/portrait_asset_path.h

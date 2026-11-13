@@ -1,0 +1,344 @@
+{
+  "clips": [
+    {
+      "id": "horizontal",
+      "source": "gemini_generated_video_5538cfc5.mp4",
+      "size": [
+        320,
+        320
+      ],
+      "crop": [
+        400,
+        48,
+        672,
+        672
+      ],
+      "neutral": 0,
+      "poseFrames": [
+        0,
+        48,
+        108,
+        144,
+        180,
+        192,
+        204,
+        239
+      ],
+      "matte": {
+        "darkThreshold": 172,
+        "chroma": 50,
+        "deskY": 274,
+        "subjectRegion": [
+          [
+            45,
+            8
+          ],
+          [
+            205,
+            8
+          ],
+          [
+            205,
+            141
+          ],
+          [
+            163,
+            147
+          ],
+          [
+            179,
+            169
+          ],
+          [
+            190,
+            202
+          ],
+          [
+            185,
+            250
+          ],
+          [
+            176,
+            277
+          ],
+          [
+            0,
+            277
+          ],
+          [
+            0,
+            183
+          ],
+          [
+            32,
+            156
+          ],
+          [
+            64,
+            141
+          ]
+        ],
+        "laptop": [
+          [
+            186,
+            201
+          ],
+          [
+            297,
+            195
+          ],
+          [
+            278,
+            274
+          ],
+          [
+            157,
+            293
+          ],
+          [
+            84,
+            282
+          ],
+          [
+            179,
+            261
+          ]
+        ]
+      },
+      "ranges": {
+        "reposo": [
+          0,
+          23
+        ],
+        "giro-derecha": [
+          24,
+          42
+        ],
+        "mirada-derecha": [
+          43,
+          66
+        ],
+        "regreso-derecha-parpadeo": [
+          67,
+          84
+        ],
+        "giro-izquierda": [
+          85,
+          96
+        ],
+        "mirada-izquierda": [
+          97,
+          114
+        ],
+        "regreso-izquierda": [
+          115,
+          126
+        ],
+        "mirada-arriba": [
+          127,
+          144
+        ],
+        "sostener-arriba": [
+          145,
+          156
+        ],
+        "regreso-arriba": [
+          157,
+          167
+        ],
+        "mirada-abajo": [
+          168,
+          180
+        ],
+        "sostener-abajo": [
+          181,
+          186
+        ],
+        "regreso-abajo-parpadeo": [
+          187,
+          198
+        ],
+        "reposo-final": [
+          199,
+          239
+        ]
+      }
+    },
+    {
+      "id": "vertical",
+      "source": "gemini_generated_video_f23deb6e.mp4",
+      "size": [
+        180,
+        320
+      ],
+      "crop": [
+        0,
+        0,
+        720,
+        1280
+      ],
+      "neutral": 0,
+      "poseFrames": [
+        0,
+        42,
+        54,
+        72,
+        126,
+        156,
+        198,
+        222
+      ],
+      "matte": {
+        "darkThreshold": 172,
+        "chroma": 50,
+        "deskY": 278,
+        "subjectRegion": [
+          [
+            33,
+            27
+          ],
+          [
+            153,
+            27
+          ],
+          [
+            153,
+            153
+          ],
+          [
+            148,
+            174
+          ],
+          [
+            157,
+            211
+          ],
+          [
+            160,
+            250
+          ],
+          [
+            152,
+            275
+          ],
+          [
+            0,
+            275
+          ],
+          [
+            0,
+            229
+          ],
+          [
+            13,
+            182
+          ],
+          [
+            33,
+            166
+          ],
+          [
+            52,
+            155
+          ]
+        ],
+        "laptop": [
+          [
+            152,
+            211
+          ],
+          [
+            180,
+            209
+          ],
+          [
+            180,
+            290
+          ],
+          [
+            117,
+            300
+          ],
+          [
+            67,
+            280
+          ],
+          [
+            147,
+            264
+          ]
+        ]
+      },
+      "ranges": {
+        "reposo": [
+          0,
+          23
+        ],
+        "giro-derecha": [
+          24,
+          36
+        ],
+        "mirada-derecha": [
+          37,
+          48
+        ],
+        "regreso-derecha-parpadeo": [
+          49,
+          56
+        ],
+        "giro-izquierda": [
+          57,
+          67
+        ],
+        "mirada-izquierda": [
+          68,
+          79
+        ],
+        "regreso-izquierda-parpadeo": [
+          80,
+          90
+        ],
+        "reposo-centro": [
+          91,
+          113
+        ],
+        "mirada-arriba": [
+          114,
+          125
+        ],
+        "sostener-arriba": [
+          126,
+          143
+        ],
+        "regreso-arriba": [
+          144,
+          149
+        ],
+        "mirada-abajo": [
+          150,
+          156
+        ],
+        "sostener-abajo": [
+          157,
+          169
+        ],
+        "regreso-abajo": [
+          170,
+          178
+        ],
+        "reposo-frente": [
+          179,
+          192
+        ],
+        "parpadeo-y-sonrisa": [
+          193,
+          212
+        ],
+        "sonrisa": [
+          213,
+          239
+        ]
+      }
+    }
+  ]
+}
