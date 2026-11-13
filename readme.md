@@ -14,6 +14,10 @@ la placa por USB. Para controlarlo por voz se utiliza el panel de la PC;
 también permite conversar con Groq, escuchar las respuestas con la voz local
 Dora y abrir, buscar y reproducir videos de YouTube en el navegador.
 
+<img src="docs/images/aubar-retrato-esp32.jpg" alt="Fotografía del retrato animado de Nahuel funcionando en la pantalla del ESP32" width="260">
+
+Retrato nuevo funcionando en la placa, fotografiado el 13 de noviembre de 2026.
+
 ## Usar el panel de PC
 
 Con Python 3.11 o superior instalado y el firmware cargado, ejecutar desde
@@ -110,7 +114,7 @@ Los nombres se dicen directamente, como **«mirada lateral arriba»** o **«tím
 Solo las poses **Enojado izquierda** y **Mirada amplia abajo izquierda** llevan
 «expresión» para distinguirlas de un comando que combina otra expresión con mirada.
 
-### Animaciones en bucle — 23
+### Animaciones del catálogo — 23
 
 | Animación | Comando de voz |
 | --- | --- |
@@ -138,8 +142,9 @@ Solo las poses **Enojado izquierda** y **Mirada amplia abajo izquierda** llevan
 | Jugar | «jugar» |
 | Celebrar | «celebrar» |
 
-**«dormido»** elige una pose fija; **«dormir»** reproduce la
-animación de sueño.
+**«dormido»** elige una expresión y **«dormir»** selecciona la animación
+del catálogo. En el retrato actual ambas muestran la imagen dormida; el video
+de sueño queda pendiente de nuevos recursos.
 
 ### Miradas y modos
 
@@ -152,7 +157,8 @@ animación de sueño.
 | Detener la secuencia en la expresión actual | «modo manual» |
 
 Una mirada aislada conserva la animación que se esté reproduciendo.
-El modo automático restaura las orientaciones originales del catálogo.
+El modo automático elimina la mirada manual y recorre el catálogo con sus
+correspondencias actuales de retrato.
 
 ## Comandos de voz combinados
 
@@ -165,8 +171,11 @@ derecha»** o **«celebrar y izquierda»**.
 
 La combinación se aplica en una sola orden y la mirada se mantiene durante
 los pasos de la animación y las selecciones siguientes. **«centro»**
-la centra; **«modo automático»** recupera las orientaciones originales.
-Los ojos dormidos siguen cerrados y también pueden orientarse.
+la centra; **«modo automático»** elimina la orientación manual.
+En el retrato actual, izquierda/derecha tienen prioridad visual sobre la emoción.
+Todavía no hay poses dormidas o enojadas para cada dirección; se usa el giro
+disponible del video. Las 153 combinaciones son comandos compatibles, no 153
+animaciones visuales distintas.
 
 Los combinados requieren el firmware con **protocolo USB v4**. Si el nombre de
 la expresión ya incluye una dirección, agregar **«mirando»** para indicar la
@@ -243,215 +252,224 @@ El catálogo también está disponible en la pestaña **Catálogo** del panel.
 
 ## Requisitos
 
-Esta guía está orientada a Windows y al modelo de placa indicado.
+La instalación está orientada a Windows y a la **Waveshare ESP32-S3-LCD-1.47B**:
+ESP32-S3, pantalla ST7789 de 172 × 320, flash de 16 MB y PSRAM de 8 MB. Se necesita
+un cable USB-C de datos.
 
-### Hardware
-
-| Elemento | Detalle |
+| Herramienta | Uso |
 | --- | --- |
-| **Waveshare ESP32-S3-LCD-1.47B** | ESP32-S3, pantalla ST7789 de 172 × 320 píxeles, 16 MB de flash y 8 MB de PSRAM |
-| **Cable USB-C de datos** | Para alimentar la placa y transferir el programa |
-| **PC con Windows y puerto USB** | Para instalar las herramientas, compilar y cargar el firmware |
+| [Arduino CLI](https://docs.arduino.cc/arduino-cli/installation/) | Compilar y cargar el firmware desde PowerShell. |
+| [Core ESP32 de Espressif](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html), versión **3.3.8** | Herramientas y bibliotecas utilizadas en la placa validada. |
+| [Python 3.11 o superior](https://www.python.org/downloads/) | Panel de PC y actualización de la ruta local del banco de imágenes. |
 
-Información de la placa: [documentación oficial de Waveshare](https://docs.waveshare.com/ESP32-S3-LCD-1.47B)
-y [página del producto](https://www.waveshare.com/esp32-s3-lcd-1.47b.htm).
-
-### Software
-
-| Herramienta | Versión / uso | Enlace |
-| --- | --- | --- |
-| **Arduino IDE** | Versión 2; editor, compilación y carga por USB | [Descarga oficial](https://www.arduino.cc/en/software/) |
-| **esp32 by Espressif Systems** | **3.3.8**, versión utilizada para validar este proyecto; incluye el compilador, Arduino y SPI para ESP32 | [Instalación oficial](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html) |
-| **Arduino CLI** — opcional | Permite compilar y cargar desde la terminal | [Documentación oficial](https://docs.arduino.cc/arduino-cli/) |
-| **Python 3.11 o superior** | Para el panel de PC y los comandos de voz; también permite regenerar los datos del avatar | [Descarga oficial](https://www.python.org/downloads/) |
-
-Se necesita internet para descargar las herramientas y el paquete ESP32.
-El firmware actual no requiere conexión a internet, microSD, micrófono,
-parlantes, credenciales ni bibliotecas adicionales del gestor de bibliotecas.
+El firmware ya cargado funciona sin internet ni microSD. El micrófono, los
+parlantes y las credenciales de IA se utilizan desde el panel de PC.
 
 ## Avatar y recursos de origen
 
-El personaje se creó y exportó con [Bible Strong Avatar Lab](https://avatars.bible-strong.app/).
-La exportación original está incluida en [avatar-original/](avatar-original/),
-junto con su demo web e instrucciones.
+El avatar actual es el retrato de Nahuel, preparado a partir de imágenes y videos
+generados con Gemini. Tiene dos videos de 240 cuadros y seis poses estáticas.
+El banco comprimido `portrait_assets.dat` está incluido en el repositorio.
 
-El renderizador geométrico anterior se conserva como referencia. El firmware
-actual dibuja el retrato con sus videos y poses, manteniendo los identificadores
-y tiempos del catálogo para la comunicación con el panel.
+<img src="newAUBAR/animaciones-sin-fondo/formato%20webp/frente-Photoroom.webp" alt="Retrato actual de Nahuel con anteojos, sentado frente a una computadora" width="220">
 
-El banco de imágenes se incluye en `portrait_assets.dat`. Si se mueve o descarga
-el proyecto en otra ruta, ejecutar `python tools/generate_portrait_firmware.py --refresh-path`
-para actualizar la ruta local sin regenerar imágenes. Ver [las instrucciones del retrato](newAUBAR/FIRMWARE_AVATAR.md).
+El avatar geométrico anterior proviene de [Bible Strong Avatar Lab](https://avatars.bible-strong.app/).
+Su exportación y el renderizador se conservan como referencia histórica.
 
-## Instalación y carga
+Consultar [la preparación y las equivalencias del retrato](newAUBAR/FIRMWARE_AVATAR.md)
+para conocer qué recursos representa cada comando y cómo incorporar nuevos videos.
 
-Para el retrato actual, usar la [compilación por CLI con aplicación de 12 MiB](newAUBAR/FIRMWARE_AVATAR.md#compilar-y-cargar).
-Las indicaciones de Arduino IDE siguientes corresponden a la configuración del
-prototipo geométrico anterior.
+## Instalación y carga con Arduino CLI
 
-### 1. Obtener el proyecto
+Ejecutar los comandos desde la raíz de `botbar`, donde está este README.
+Descargar y extraer el ZIP del repositorio o clonarlo con Git antes de continuar.
+Mantener juntos los archivos de `firmware/KirbyPantalla`.
 
-Descargar el repositorio desde **Code > Download ZIP** en GitHub y extraerlo
-en una carpeta local. También se puede clonar con Git.
+### 1. Preparar Arduino CLI
 
-Abrir los archivos desde la carpeta extraída, no desde el ZIP.
+Instalar [Arduino CLI para Windows](https://docs.arduino.cc/arduino-cli/installation/)
+y dejar el ejecutable disponible en PATH. En PowerShell:
 
-### 2. Instalar Arduino IDE y el soporte ESP32
+```powershell
+$aubarCli = "arduino-cli"
+$aubarCliArgs = @()
+& $aubarCli @aubarCliArgs version
+```
 
-1. Descargar e instalar [Arduino IDE 2 para Windows](https://www.arduino.cc/en/software/).
-2. Abrir **Archivo > Preferencias**.
-3. Agregar la siguiente dirección en **URLs adicionales de gestor de placas**,
-   conservando las direcciones existentes:
+Si ya se dispone de Arduino IDE 2, se puede usar su CLI incluida en lugar de
+instalar otra. En ese caso, reemplazar las dos primeras variables por estas
+rutas habituales y continuar con los mismos comandos:
 
-   ```text
-   https://espressif.github.io/arduino-esp32/package_esp32_index.json
-   ```
+```powershell
+$aubarCli = "$env:LOCALAPPDATA/Programs/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe"
+$aubarCliArgs = @("--config-file", "$env:USERPROFILE/.arduinoIDE/arduino-cli.yaml")
+& $aubarCli @aubarCliArgs version
+```
 
-4. Abrir el **Gestor de placas**, buscar **esp32 by Espressif Systems** e
-   instalar la versión **3.3.8**.
+Las rutas pueden variar según la instalación. La compilación de esta guía se
+realiza por CLI en ambos casos.
 
-El paquete instala las herramientas de compilación y carga necesarias.
-No hay que instalar bibliotecas adicionales para esta versión.
+### 2. Instalar el soporte ESP32
 
-### 3. Abrir y configurar el firmware
+En una instalación nueva, actualizar el índice e instalar la versión validada:
 
-Abrir [firmware/KirbyPantalla/KirbyPantalla.ino](firmware/KirbyPantalla/KirbyPantalla.ino)
-en Arduino IDE. Mantener juntos todos los archivos de la carpeta
-`KirbyPantalla` y conservar su nombre.
+```powershell
+& $aubarCli @aubarCliArgs core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+& $aubarCli @aubarCliArgs core install esp32:esp32@3.3.8 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
 
-En **Herramientas > Placa > esp32**, seleccionar **ESP32S3 Dev Module**.
-Configurar:
+Si esa versión ya está instalada y accesible con la configuración elegida,
+se puede pasar al siguiente paso. No hacen falta bibliotecas adicionales del
+gestor de bibliotecas para el firmware.
 
-| Opción | Valor |
+### 3. Preparar la ruta del banco de imágenes
+
+Después de clonar o mover el proyecto:
+
+```powershell
+python tools/generate_portrait_firmware.py --refresh-path
+```
+
+Este paso usa Python estándar y conserva los cuadros aprobados. Crea la ruta
+local que el ensamblador necesita para incluir `portrait_assets.dat`; no vuelve
+a generar imágenes ni videos.
+
+### 4. Detectar la placa y compilar
+
+Conectar el ESP32 y cerrar la conexión del panel o cualquier monitor serie que
+esté usando su puerto:
+
+```powershell
+& $aubarCli @aubarCliArgs board list
+& $aubarCli @aubarCliArgs compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --build-path build/portrait --output-dir build/portrait-output firmware/KirbyPantalla
+```
+
+La configuración usada es:
+
+| Parámetro | Valor |
 | --- | --- |
-| Flash Size | 16MB (128Mb) |
-| PSRAM | OPI PSRAM |
-| USB CDC On Boot | Enabled |
-| USB Mode | Hardware CDC and JTAG |
-| Partition Scheme | Default (la predeterminada de esta placa) |
+| Placa | ESP32S3 Dev Module |
+| Flash | 16 MB |
+| PSRAM | OPI, 8 MB en la placa comprobada |
+| USB CDC al iniciar | Activado |
+| Particiones | `firmware/KirbyPantalla/partitions.csv` |
+| Espacio de aplicación | **12 MiB: 12.582.912 bytes** |
+| Compilación | Un proceso, `--jobs 1` |
 
-Las demás opciones pueden quedar por defecto. Si estas opciones no aparecen,
-revisar la placa seleccionada y la versión del paquete ESP32.
+La tabla local de particiones se incorpora al compilar. El valor
+`upload.maximum_size` debe coincidir con sus 12 MiB: una partición predeterminada
+pequeña no alcanza para este banco de imágenes. Esta distribución tiene una sola
+aplicación y se actualiza por USB.
 
-### 4. Conectar y cargar
+### 5. Cargar el firmware
 
-1. Conectar la placa a la PC con el cable USB-C de datos.
-2. En **Herramientas > Puerto**, seleccionar el puerto que aparece al conectarla.
-   El número `COM` depende de la PC.
-3. Pulsar **Subir** y esperar a que termine la carga.
-4. Si no arranca automáticamente, pulsar **RESET**.
-5. Comprobar que el personaje aparece centrado y parpadea cada pocos segundos.
+Reemplazar `COM3` por el puerto que mostró `board list`:
 
-La carga reemplaza el programa anterior de la placa. No hace falta borrar
-la memoria previamente. Una vez cargado, se puede cerrar Arduino IDE:
-el avatar vuelve a arrancar cada vez que la placa recibe alimentación.
+```powershell
+& $aubarCli @aubarCliArgs upload --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --port COM3 --input-dir build/portrait-output firmware/KirbyPantalla
+```
+
+Esperar que finalice la escritura y la verificación. La carga reemplaza el
+programa anterior. Al reiniciar, el retrato aparece y pasa al modo automático.
+Después se puede abrir el panel y conectar el mismo puerto para usar la voz.
+No hace falta borrar toda la memoria previamente.
 
 ### Solución de problemas
 
 | Problema | Qué revisar |
 | --- | --- |
-| No aparece un puerto al conectar | Usar un cable de datos y probar otro puerto USB |
-| No entra en modo de carga | Mantener **BOOT**, pulsar y soltar **RESET**, y después soltar **BOOT**; volver a seleccionar el puerto |
-| Puerto ocupado | Cerrar el monitor serie u otros programas que usen ese puerto |
-| La compilación no encuentra los archivos del proyecto | Abrir el `.ino` desde la carpeta extraída y mantener juntos todos los archivos de `KirbyPantalla` |
-| Opciones de placa diferentes | Seleccionar **ESP32S3 Dev Module** del paquete **esp32 by Espressif Systems 3.3.8** |
-
-## Carga desde la terminal — opcional
-
-Requiere Arduino CLI y el paquete ESP32 instalado. La instalación con Arduino IDE
-de la sección anterior es suficiente si la CLI utiliza su misma configuración.
-
-Desde la raíz del proyecto, con `arduino-cli` disponible en PATH:
-
-```powershell
-arduino-cli board list
-arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --upload --port COM3 firmware/KirbyPantalla
-```
-
-Reemplazar `COM3` por el puerto detectado. Para compilar sin cargar, quitar
-`--upload --port COM3`.
-
-En una instalación de Arduino IDE para el usuario de Windows, la CLI incluida
-puede ejecutarse desde PowerShell de esta manera:
-
-```powershell
-$kirbyCli = "$env:LOCALAPPDATA\Programs\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe"
-$kirbyConfig = "$env:USERPROFILE\.arduinoIDE\arduino-cli.yaml"
-& $kirbyCli --config-file $kirbyConfig board list
-& $kirbyCli --config-file $kirbyConfig compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --upload --port COM3 firmware/KirbyPantalla
-```
-
-La ubicación de la CLI puede variar según la instalación. Usar Arduino IDE
-es la alternativa si estas rutas no existen.
+| No aparece el puerto | Cable de datos, otro puerto USB y `board list`. |
+| Puerto ocupado | Desconectar el panel y cerrar los monitores serie antes de cargar. |
+| No entra en modo de carga | Mantener BOOT, pulsar y soltar RESET, soltar BOOT y detectar otra vez el puerto. |
+| Falta `portrait_asset_path.h` o falla `.incbin` | Ejecutar `python tools/generate_portrait_firmware.py --refresh-path` desde la raíz. |
+| El programa excede el espacio permitido | Conservar `partitions.csv` y el argumento `upload.maximum_size=12582912`. |
+| No se detecta PSRAM | Usar `PSRAM=opi` y comprobar el modelo de placa. |
+| Los colores se ven alterados | Usar el controlador incluido: RAMCTRL `0xE0`, coherente con los buffers RGB565 MSB primero. |
 
 ## Estructura del proyecto
 
 ```text
 firmware/KirbyPantalla/
-  KirbyPantalla.ino       Inicio y secuencia de parpadeo
+  KirbyPantalla.ino       Inicio, USB y presentación del retrato
   Display_ST7789.cpp      Controlador de la pantalla
   Display_ST7789.h        Pines y configuración de la pantalla
-  avatar_data.h          Datos del avatar listos para compilar
-  avatar_render.h        Dibujo del personaje
-avatar-original/         Exportación del avatar y demo web
+  portrait_player.h      Descompresión y transiciones del retrato
+  portrait_routes.h      Correspondencias entre comandos y poses
+  portrait_assets.dat    Banco comprimido de 486 cuadros
+  partitions.csv         Aplicación de 12 MiB en flash de 16 MB
+  avatar_data.h          Catálogo lógico original para el protocolo USB
+newAUBAR/                Recursos, preparación y documentación del retrato
+avatar-original/         Exportación del avatar anterior y demo web
 pc/aubar_control/        Panel, micrófono, voz, IA y control de YouTube
-tools/                   Lanzador, instaladores y generador del avatar
-tests/pc/                Pruebas automáticas del panel y sus componentes
-docs/images/             Imágenes del prototipo
+tools/                   Lanzadores, instaladores y preparación de recursos
+tests/pc/                Pruebas del panel y sus componentes
+docs/images/             Fotografías de la placa y del prototipo anterior
 .env.example             Plantilla de configuración local de Groq
 .gitignore               Exclusiones de Git
 readme.md                Requisitos e instrucciones del proyecto
 ```
 
-Los archivos de `firmware/KirbyPantalla/` contienen lo necesario para
-compilar y cargar esta versión. Los archivos compilados se generan localmente.
+El firmware incluye el banco comprimido para compilar la versión aprobada.
+Las cachés, los originales duplicados y los cuadros intermedios regenerables
+se conservan localmente y se excluyen de Git. La carpeta `referencias/`, también
+excluida, conserva los ejemplos descargados de Waveshare; el controlador necesario
+ya está incluido en el firmware.
 
-La carpeta `referencias/`, excluida de Git, contiene los ejemplos completos
-descargados de Waveshare. El controlador usado está incluido en
-`firmware/KirbyPantalla/`; descargar esos ejemplos es opcional.
-Las cachés, los temporales y las dependencias locales también se excluyen de Git.
+## Preparar nuevos recursos del avatar
 
-## Modificar los datos del avatar — opcional
+Para ampliar imágenes y videos, seguir [la guía del firmware](newAUBAR/FIRMWARE_AVATAR.md)
+y [la preparación de cuadros](newAUBAR/frames-preparados/README.md). El proceso
+extrae cuadros con FFmpeg y Python y genera explícitamente un nuevo banco. No se
+ejecuta al abrir el panel ni al compilar.
 
-Esta sección conserva el generador del catálogo geométrico. Para cambiar las
-imágenes del retrato, usar `tools/generate_portrait_firmware.py`.
+El script `tools/generate_avatar_data.py` se conserva para el catálogo geométrico
+anterior; las imágenes del retrato se empaquetan con `tools/generate_portrait_firmware.py`.
 
-Para regenerar `avatar_data.h` desde
-`avatar-original/kirby.avatar.json`, instalar Python 3 y ejecutar desde
-la raíz del proyecto:
+## Evolución del avatar
 
-```powershell
-python tools/generate_avatar_data.py
-```
+### Versión actual: retrato animado de Nahuel
 
-El generador usa la biblioteca estándar de Python. Después de regenerar los
-datos, compilar y cargar nuevamente el firmware. El generador adapta la
-geometría, las 28 expresiones y los pasos de las 23 animaciones para el reproductor
-local; no convierte el motor de animaciones web.
+Fotografías del avatar funcionando en la placa: mirando al frente, mirando hacia
+arriba y pensando con la mano en el rostro.
 
-## Imágenes del prototipo
+<img src="docs/images/aubar-retrato-esp32.jpg" alt="Retrato de Nahuel mirando al frente en la pantalla del ESP32" width="220"> <img src="docs/images/aubar-retrato2-esp32.jpg" alt="Retrato de Nahuel mirando hacia arriba en la pantalla del ESP32" width="220"> <img src="docs/images/aubar-retrato3-esp32.jpg" alt="Retrato de Nahuel pensando con la mano en el rostro en la pantalla del ESP32" width="220">
 
-<img src="docs/images/kirby-ojos-semicerrados-ilustracion.png" alt="Ilustración editada con IA: ojos a medio cerrar" width="240"><img src="docs/images/kirby-ojos-cerrados-ilustracion.png" alt="Ilustración editada con IA: ojos cerrados" width="240"><img src="docs/images/kirby-pantalla.png" alt="Fotografía del avatar en la pantalla de la Waveshare" width="240">
+Esta hoja adicional muestra los cuadros preparados para la pantalla:
 
+<img src="newAUBAR/frames-preparados/vertical/poses.jpg" alt="Cuadros del retrato: frente, giros, parpadeo, miradas y sonrisa" width="640">
+
+### Versión anterior: avatar geométrico
+
+Las ilustraciones y la fotografía del prototipo anterior permiten comparar el
+cambio al nuevo personaje con rostro y cuerpo.
+
+<img src="docs/images/kirby-ojos-semicerrados-ilustracion.png" alt="Ilustración del avatar anterior con ojos a medio cerrar" width="220"><img src="docs/images/kirby-ojos-cerrados-ilustracion.png" alt="Ilustración del avatar anterior con ojos cerrados" width="220"><img src="docs/images/kirby-pantalla.png" alt="Fotografía del avatar geométrico anterior en la Waveshare" width="220">
 
 ## Validación
 
-Versión compilada con **esp32 by Espressif Systems 3.3.8** y cargada por USB
-en una **Waveshare ESP32-S3-LCD-1.47B**, el **26 de octubre de 2026**.
-La herramienta verificó los datos escritos y se confirmó visualmente
-que el avatar aparecía en la pantalla.
+El retrato nuevo se compiló y cargó el **13 de noviembre de 2026**, con el core
+ESP32 **3.3.8**, en la Waveshare ESP32-S3-LCD-1.47B conectada por COM3. Se verificó
+la escritura por hash y Nahuel confirmó los colores en la pantalla física.
 
-El panel de PC pasó **217 pruebas automáticas** y la comprobación de dependencias
-con `pip check`. Se probó con Vosk, Groq, Dora, navegador y ESP32 reales, y se
-confirmó el funcionamiento con micrófono y parlantes el **27 de octubre de 2026**.
+Pasaron las seis poses por checksum, las tres miradas, la reproducción de ambos
+videos, las 51 opciones individuales y las 153 combinaciones del catálogo USB.
+Se detectaron 8 MB de PSRAM y cero errores de descompresión. Queda pendiente pulir
+un halo claro leve visible en algunos contornos y ampliar las animaciones.
+
+El detalle está en [el registro del firmware](newAUBAR/FIRMWARE_AVATAR.md).
+
+### Comprobaciones anteriores
+
+El prototipo geométrico se compiló y cargó por USB el **26 de octubre de 2026**.
+El panel de PC pasó **217 pruebas automáticas** y `pip check`. Se probó con Vosk,
+Groq, Dora, navegador y ESP32 reales, y se confirmó el funcionamiento con
+micrófono y parlantes el **27 de octubre de 2026**.
 
 ## Créditos y documentación
 
-- Avatar: [Bible Strong Avatar Lab](https://avatars.bible-strong.app/).
+- Retrato actual: imágenes y videos aportados por Nahuel, generados con Gemini; preparación local con FFmpeg y Python.
+- Avatar geométrico anterior: [Bible Strong Avatar Lab](https://avatars.bible-strong.app/).
 - Hardware: [Waveshare ESP32-S3-LCD-1.47B](https://docs.waveshare.com/ESP32-S3-LCD-1.47B).
-- Configuración y ejemplos: [guía de Arduino de Waveshare](https://docs.waveshare.com/ESP32-S3-LCD-1.47B/Arduino).
-- Controlador de pantalla: adaptado del ejemplo **LCD_Image** del
-  [paquete oficial de ejemplos de Waveshare](https://files.waveshare.com/wiki/ESP32-S3-LCD-1.47B/ESP32-S3-LCD-1.47B-Demo.zip).
-  Se ajustó SPI a 40 MHz y se eliminó un buffer de lectura innecesario.
-- Entorno: [Arduino](https://www.arduino.cc/en/software/) y
-  [Arduino ESP32 de Espressif](https://docs.espressif.com/projects/arduino-esp32/en/latest/).
+- Instalación de herramientas: [Arduino CLI](https://docs.arduino.cc/arduino-cli/installation/) y [primeros pasos](https://docs.arduino.cc/arduino-cli/getting-started/).
+- Controlador de pantalla: adaptado del ejemplo **LCD_Image** del [paquete de Waveshare](https://files.waveshare.com/wiki/ESP32-S3-LCD-1.47B/ESP32-S3-LCD-1.47B-Demo.zip), con SPI a 40 MHz y orden RGB565 corregido.
+- Entorno: [Arduino ESP32 de Espressif](https://docs.espressif.com/projects/arduino-esp32/en/latest/).
