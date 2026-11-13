@@ -5,7 +5,9 @@ Todo el material de creación del avatar se organiza dentro de `newAUBAR`.
 | Tramo | Contenido | Estado |
 | --- | --- | --- |
 | [01 — Base y miradas](tramo-01-base-miradas/guia/GUIA_AVATAR.md) | Seis poses iniciales, dos videos, miradas, parpadeos, sonrisa y cuadros del avatar actual. | Integrado en el ESP32. |
-| [02 — Emociones](tramo-02-emociones/guia/PLAN_ANIMACIONES_PENDIENTES.md) | Enojado, sospechoso, confundido, triste, asustado y tímido. | Carpetas listas para recibir imágenes y video. |
+| [02 — Emociones](tramo-02-emociones/guia/INTEGRACION.md) | Enojado, sospechoso, confundido, triste, asustado y tímido. | Integrado en el ESP32. |
+| [03 — Gestos restantes](tramo-03-gestos-restantes/guia/INTEGRACION.md) | Aburrimiento, sorpresa, orgullo, risa y variantes alegres. | Integrado en el ESP32. |
+| [04 — Habla](tramo-04-hablar/guia/HABLA.md) | Boca animada durante la reproducción de Onyx. | Integrado en el ESP32. |
 
 Cada tramo tiene esta estructura:
 
@@ -29,6 +31,9 @@ Los archivos `.gitkeep` solo conservan las carpetas vacías en Git. Podés guard
 
 `nahue_pick.png` se conserva en esta raíz como referencia histórica del estilo anterior. La referencia vigente para generar las nuevas emociones es el frontal original del tramo 01.
 
-Los scripts de preparación y empaquetado siguen apuntando al tramo 01 aprobado. El tramo 02 se integrará después de revisar sus nuevos recursos; crear sus carpetas no cambia lo que muestra la placa.
+`prepare_aubar_frames.py` prepara las miradas del tramo 01.
+`prepare_speech_frames.py --stage emotions`, `--stage gestures` o `--stage speech`
+prepara respectivamente los tramos 02, 03 y 04. El empaquetador incorpora los
+cuatro tramos y conserva cuadros nativos a 24 fps con compresión sin pérdida.
 
-Al iniciar otra tanda, crear `tramo-03-nombre` con la misma estructura.
+Al iniciar otra tanda, crear una carpeta nueva con la misma estructura.

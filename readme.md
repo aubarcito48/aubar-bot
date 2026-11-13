@@ -73,6 +73,8 @@ de cada fonema. [Preparación y prueba del habla](newAUBAR/tramo-04-hablar/guia/
 
 El [tramo 02](newAUBAR/tramo-02-emociones/guia/INTEGRACION.md) agrega movimientos
 propios para sospecha, confusión, enojo, tristeza, miedo y timidez.
+El [tramo 03](newAUBAR/tramo-03-gestos-restantes/guia/INTEGRACION.md) agrega
+aburrimiento, sorpresa, orgullo, risa y variantes de alegría, juego y celebración.
 
 | Acción | Ejemplo de voz |
 | --- | --- |
@@ -418,7 +420,7 @@ firmware/KirbyPantalla/
   Display_ST7789.h        Pines y configuración de la pantalla
   portrait_player.h      Descompresión y transiciones del retrato
   portrait_routes.h      Correspondencias entre comandos y poses
-  portrait_assets.dat    Banco comprimido de 906 cuadros
+  portrait_assets.dat    Banco comprimido de 1146 cuadros
   partitions.csv         Aplicación de 12 MiB en flash de 16 MB
   avatar_data.h          Catálogo lógico original para el protocolo USB
 newAUBAR/                Recursos, preparación y documentación del retrato

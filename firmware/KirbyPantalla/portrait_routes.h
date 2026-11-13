@@ -7,11 +7,15 @@ enum class PortraitScene : uint8_t {
   Front, Computer, Thinking, Sleeping, MouthHalf, MouthOpen,
   IdleVideo, SearchVideo, ListeningVideo, HappyVideo, UpVideo,
   Left, Right, Down, Up, Smile,
-  Suspicious, Confused, Angry, Sad, Scared, Shy
+  Suspicious, Confused, Angry, Sad, Scared, Shy,
+  Bored, Surprised, Proud, Laughing, Excited, Joyful, Playful, Celebrate
 };
 
 constexpr PortraitScene portraitExpressionScene(AvatarExpressionId id) {
   switch(id) {
+    case AvatarExpressionId::Happy: case AvatarExpressionId::JoyfulDownRight: return PortraitScene::Joyful;
+    case AvatarExpressionId::Surprised: case AvatarExpressionId::SurprisedLeft: return PortraitScene::Surprised;
+    case AvatarExpressionId::PlayfulRight: return PortraitScene::Playful;
     case AvatarExpressionId::Angry: case AvatarExpressionId::AngryLeft:
     case AvatarExpressionId::AngryBrows: return PortraitScene::Angry;
     case AvatarExpressionId::SuspiciousRight: return PortraitScene::Suspicious;
@@ -38,12 +42,12 @@ constexpr PortraitScene portraitAnimationScene(AvatarAnimationId id) {
   constexpr PortraitScene scenes[] = {
     PortraitScene::Sleeping, PortraitScene::Front, PortraitScene::IdleVideo,
     PortraitScene::ListeningVideo, PortraitScene::Thinking, PortraitScene::SearchVideo,
-    PortraitScene::Computer, PortraitScene::HappyVideo, PortraitScene::Sleeping,
+    PortraitScene::Computer, PortraitScene::Excited, PortraitScene::Bored,
     PortraitScene::Suspicious, PortraitScene::Angry, PortraitScene::Sleeping,
-    PortraitScene::HappyVideo, PortraitScene::UpVideo, PortraitScene::Confused,
-    PortraitScene::MouthOpen, PortraitScene::Smile, PortraitScene::Shy,
-    PortraitScene::Sad, PortraitScene::MouthHalf, PortraitScene::Scared,
-    PortraitScene::HappyVideo, PortraitScene::HappyVideo
+    PortraitScene::Joyful, PortraitScene::UpVideo, PortraitScene::Confused,
+    PortraitScene::Surprised, PortraitScene::Proud, PortraitScene::Shy,
+    PortraitScene::Sad, PortraitScene::Laughing, PortraitScene::Scared,
+    PortraitScene::Playful, PortraitScene::Celebrate
   };
   static_assert(sizeof(scenes)/sizeof(scenes[0]) == static_cast<uint8_t>(AvatarAnimationId::Count));
   return id < AvatarAnimationId::Count ? scenes[static_cast<uint8_t>(id)] : PortraitScene::Front;
@@ -97,6 +101,26 @@ constexpr uint16_t portraitFrame(PortraitScene scene, uint32_t elapsedMs) {
     case PortraitScene::Sad: return PORTRAIT_EMOTIONS+136+(tick<24?tick:24);
     case PortraitScene::Scared: return PORTRAIT_EMOTIONS+168+(tick<24?tick:24);
     case PortraitScene::Shy: return PORTRAIT_EMOTIONS+208+(tick<14?tick:14);
+    case PortraitScene::Bored: return PORTRAIT_GESTURES+20+(tick<24?tick:24);
+    case PortraitScene::Surprised: return PORTRAIT_GESTURES+56+(tick<32?tick:32);
+    case PortraitScene::Proud: return PORTRAIT_GESTURES+100+(tick<20?tick:20);
+    case PortraitScene::Laughing: {
+      const uint16_t p=tick%80;
+      return PORTRAIT_GESTURES+128+(p<=40?p:80-p);
+    }
+    case PortraitScene::Excited: {
+      const uint16_t p=tick%48;
+      return PORTRAIT_GESTURES+172+(p<=24?p:48-p);
+    }
+    case PortraitScene::Joyful: return PORTRAIT_GESTURES+188+(tick<16?tick:16);
+    case PortraitScene::Playful: {
+      const uint16_t p=tick%40;
+      return PORTRAIT_GESTURES+204+(p<=20?p:40-p);
+    }
+    case PortraitScene::Celebrate: {
+      const uint16_t p=tick%72;
+      return PORTRAIT_GESTURES+172+(p<=36?p:72-p);
+    }
   }
   return PORTRAIT_STILLS;
 }

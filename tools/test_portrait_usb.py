@@ -29,15 +29,19 @@ def hashes():
         return list(map(int,re.search(name+r'\[\] = \{([^}]+)',header)[1].split(',')))
     offsets,lengths=array('PORTRAIT_OFFSETS'),array('PORTRAIT_LENGTHS')
     deltas=array('PORTRAIT_DELTA')
+    reverse_offsets,reverse_lengths=array('PORTRAIT_REVERSE_OFFSETS'),array('PORTRAIT_REVERSE_LENGTHS')
     blob=(ROOT/'firmware/KirbyPantalla/portrait_assets.dat').read_bytes()
     result=[]
     previous=None
-    for offset,length,delta in zip(offsets,lengths,deltas):
+    for offset,length,delta,ro,rl in zip(offsets,lengths,deltas,reverse_offsets,reverse_lengths):
         raw=zlib.decompress(blob[offset:offset+length])
         if delta:
             assert previous is not None
             raw=bytes(a^b for a,b in zip(raw,previous))
         assert len(raw)==172*320
+        if rl:
+            reverse=zlib.decompress(blob[ro:ro+rl])
+            assert bytes(a^b for a,b in zip(raw,reverse))==previous
         previous=raw
         value=2166136261
         for pixel in raw: value=((value^pixel)*16777619)&0xffffffff
@@ -57,8 +61,7 @@ def main():
             return session.apply_action(VoiceAction(command,argument,'',look))
         apply('MODE','auto')
         cases=[('EXPRESSION','neutral',480),('EXPRESSION','gentle-downward-gaze',481),
-               ('ANIMATION','thinking',482),('EXPRESSION','dormido',483),
-               ('ANIMATION','laughing',484),('EXPRESSION','sorprendido',485)]
+               ('ANIMATION','thinking',482),('EXPRESSION','dormido',483)]
         for command,identifier,frame in cases:
             apply(command,identifier)
             time.sleep(.5)
@@ -122,6 +125,25 @@ def main():
             assert data['frame']==base+frame,(animation,data)
             assert data['checksum']==expected[data['frame']],(animation,data)
             print(animation,data,flush=True)
+        base=int(re.search(r'PORTRAIT_GESTURES=(\d+)',header)[1])
+        for animation,frame in [('bored',44),('surprised',88),('proud',120),('happy',204)]:
+            apply('ANIMATION',animation)
+            time.sleep(1.6)
+            data=diagnostics(session)
+            assert data['frame']==base+frame,(animation,data)
+            assert data['checksum']==expected[data['frame']],(animation,data)
+            print(animation,data,flush=True)
+        for animation,first,last in [('laughing',128,168),('excited',172,196),
+                                     ('playful',204,224),('celebrate',172,208)]:
+            apply('ANIMATION',animation)
+            time.sleep(.4)
+            before=diagnostics(session)
+            time.sleep(2.2)
+            after=diagnostics(session)
+            assert base+first<=after['frame']<=base+last,(animation,after)
+            assert after['checksum']==expected[after['frame']],(animation,after)
+            assert after['drawn']-before['drawn']>=46,(animation,before,after)
+            print(animation,after,flush=True)
         apply('MODE','auto')
         print(f'Portrait USB PASS: {len(expected)} desktop decodes, stills, gazes, videos, speech, checksums, PSRAM, live frame rate. Auto restored.')
     finally:

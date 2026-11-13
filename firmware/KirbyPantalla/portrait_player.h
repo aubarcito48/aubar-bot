@@ -70,11 +70,12 @@ class PortraitPlayer {
     return true;
   }
  private:
-  bool unpack(uint16_t frame,bool difference) {
+  bool unpack(uint16_t frame,bool difference,bool reverse=false) {
     uint8_t* target=difference?delta_:indices_;
     tinfl_init(inflater_);
-    size_t input=PORTRAIT_LENGTHS[frame],output=PORTRAIT_PIXELS;
-    const auto result=tinfl_decompress(inflater_,aubarPortraitData+PORTRAIT_OFFSETS[frame],
+    size_t input=reverse?PORTRAIT_REVERSE_LENGTHS[frame]:PORTRAIT_LENGTHS[frame],output=PORTRAIT_PIXELS;
+    const auto offset=reverse?PORTRAIT_REVERSE_OFFSETS[frame]:PORTRAIT_OFFSETS[frame];
+    const auto result=tinfl_decompress(inflater_,aubarPortraitData+offset,
       &input,target,target,&output,TINFL_FLAG_PARSE_ZLIB_HEADER|TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
     if(result!=TINFL_STATUS_DONE || output!=PORTRAIT_PIXELS) return false;
     if(difference) for(uint32_t i=0;i<PORTRAIT_PIXELS;++i) indices_[i]^=delta_[i];
@@ -83,8 +84,9 @@ class PortraitPlayer {
   bool decode(uint16_t frame) {
     if(frame==decoded_) return true;
     // XOR is reversible: the speech ping-pong can step back without seeking.
-    if(decoded_!=0xffff && frame+1==decoded_ && PORTRAIT_DELTA[decoded_]) {
-      if(!unpack(decoded_,true)) return false;
+    if(decoded_!=0xffff && frame+1==decoded_ &&
+       (PORTRAIT_DELTA[decoded_] || PORTRAIT_REVERSE_LENGTHS[decoded_])) {
+      if(!unpack(decoded_,true,!PORTRAIT_DELTA[decoded_])) return false;
       decoded_=frame; return true;
     }
     uint16_t key=frame;

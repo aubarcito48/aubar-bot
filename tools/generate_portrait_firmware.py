@@ -39,6 +39,7 @@ def write_assembly_paths():
 
 def main():
     from PIL import Image, ImageDraw
+    import numpy as np
     groups = [
         ("Vertical", [SOURCE / "frames-preparados/vertical/sin-fondo" / f"{i:03d}.webp" for i in range(240)]),
         ("Horizontal", [SOURCE / "frames-preparados/horizontal/sin-fondo" / f"{i:03d}.webp" for i in range(240)]),
@@ -46,6 +47,7 @@ def main():
                     for n in ["frente", "mira-pc", "pensando", "dormido", "boca-semi-abierta", "boca-abierta"]]),
         ("Speech", [ROOT / "newAUBAR/tramo-04-hablar/frames-preparados/hablar/sin-fondo" / f"{i:03d}.webp" for i in range(36,216)]),
         ("Emotions", [ROOT / "newAUBAR/tramo-02-emociones/frames-preparados/emociones/sin-fondo" / f"{i:03d}.webp" for i in range(240)]),
+        ("Gestures", [ROOT / "newAUBAR/tramo-03-gestos-restantes/frames-preparados/gestos/sin-fondo" / f"{i:03d}.webp" for i in range(240)]),
     ]
     # A single palette prevents independent quantizers from changing skin colors
     # between adjacent frames. No dithering: avoid temporal speckles at LCD size.
@@ -59,6 +61,7 @@ def main():
     colors = [((rgb_palette[i] >> 3) << 11) | ((rgb_palette[i+1] >> 2) << 5)
               | (rgb_palette[i+2] >> 3) for i in range(0, 768, 3)]
     offsets, lengths, records, previews, deltas = [], [], [], [], []
+    reverse_offsets, reverse_lengths = [], []
     blob = bytearray()
     bases = {}
     for name, paths in groups:
@@ -71,13 +74,13 @@ def main():
             compressed = zlib.compress(raw, level=9)
             assert zlib.decompress(compressed) == raw
             use_delta = False
+            packed = None
             # Exact XOR deltas with a keyframe every 12 frames bound seek work.
-            if previous is not None and i % 12:
-                import numpy as np
+            if previous is not None:
                 difference=np.bitwise_xor(np.frombuffer(raw,dtype=np.uint8),
                     np.frombuffer(previous,dtype=np.uint8)).tobytes()
                 packed=zlib.compress(difference,level=9)
-                if len(packed)<len(compressed):
+                if i % 12 and len(packed)<len(compressed):
                     restored=np.bitwise_xor(np.frombuffer(zlib.decompress(packed),dtype=np.uint8),
                         np.frombuffer(previous,dtype=np.uint8)).tobytes()
                     assert restored==raw
@@ -86,8 +89,20 @@ def main():
             previous=raw
             offsets.append(len(blob)); lengths.append(len(compressed))
             blob.extend(compressed)
+            # Keep the inverse step at full keyframes too: reverse playback
+            # must not rebuild an entire chain every half second.
+            if packed is not None and not use_delta:
+                reverse_offsets.append(len(blob)); reverse_lengths.append(len(packed))
+                blob.extend(packed)
+            else:
+                reverse_offsets.append(0); reverse_lengths.append(0)
             records.append({"id": len(offsets)-1, "source": path.relative_to(ROOT).as_posix()})
-            if (name in ("Vertical", "Horizontal") and i in (0,42,72,126,156,198,222)) or name == "Stills" or (name=="Emotions" and i in (40,88,112,152,192,232)):
+            show_preview = (
+                name in ("Vertical", "Horizontal") and i in (0,42,72,126,156,198,222)
+                or name == "Stills"
+                or name == "Emotions" and i in (40,88,112,160,192,222)
+                or name == "Gestures" and i in (44,88,120,150,190,220))
+            if show_preview:
                 previews.append((f"{name} {i}", indexed.convert("RGB")))
         print(f"{name}: {len(paths)} frames", flush=True)
     if len(blob) > 11_900_000:
@@ -104,6 +119,8 @@ def main():
         header.append(f"constexpr uint16_t PORTRAIT_{name.upper()}={base};")
     header.append('constexpr uint16_t PORTRAIT_SPEECH_COUNT=180;')
     header.append('constexpr uint8_t PORTRAIT_DELTA[] = {' + ','.join(map(str,deltas)) + '};')
+    header.append('constexpr uint32_t PORTRAIT_REVERSE_OFFSETS[] = {' + ','.join(map(str,reverse_offsets)) + '};')
+    header.append('constexpr uint32_t PORTRAIT_REVERSE_LENGTHS[] = {' + ','.join(map(str,reverse_lengths)) + '};')
     header += ["constexpr uint16_t PORTRAIT_PALETTE[] = {" + ",".join(f"0x{x:04x}" for x in colors) + "};",
                "constexpr uint32_t PORTRAIT_OFFSETS[] = {" + ",".join(map(str, offsets)) + "};",
                "constexpr uint32_t PORTRAIT_LENGTHS[] = {" + ",".join(map(str, lengths)) + "};"]

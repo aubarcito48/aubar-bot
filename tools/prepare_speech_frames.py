@@ -10,6 +10,7 @@ def main(ffmpeg, stage='speech'):
     folder, name, video = {
         'speech': ('tramo-04-hablar', 'hablar', 'botbar-hablando.mp4'),
         'emotions': ('tramo-02-emociones', 'emociones', 'gemini_generated_video_dda76b2e.mp4'),
+        'gestures': ('tramo-03-gestos-restantes', 'gestos', 'gemini_generated_video_fec8b636.mp4'),
     }[stage]
     source = ROOT / 'newAUBAR' / folder
     work = source / 'revision-video' / name
@@ -42,6 +43,6 @@ def main(ffmpeg, stage='speech'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ffmpeg', required=True)
-    parser.add_argument('--stage', choices=('speech','emotions'), default='speech')
+    parser.add_argument('--stage', choices=('speech','emotions','gestures'), default='speech')
     args=parser.parse_args()
     main(args.ffmpeg, args.stage)

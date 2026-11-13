@@ -18,9 +18,10 @@ usa el descompresor de su ROM y buffers en RAM/PSRAM. Los fundidos entre recurso
 independientes duran 220 ms. Dentro de los videos se siguen los cuadros a 24 fps;
 si el procesamiento tarda más que un intervalo, se avanza según el tiempo real.
 
-El banco `portrait_assets.dat` ocupa 7.602.385 bytes y contiene 906 cuadros, incluyendo
+El banco `portrait_assets.dat` ocupa 11.009.820 bytes y contiene 1146 cuadros, incluyendo
 180 del [tramo de habla](../../tramo-04-hablar/guia/HABLA.md) y 240 del
-[tramo de emociones](../../tramo-02-emociones/guia/INTEGRACION.md).
+[tramo de emociones](../../tramo-02-emociones/guia/INTEGRACION.md), además de
+240 del [tramo de gestos](../../tramo-03-gestos-restantes/guia/INTEGRACION.md).
 Usa diferencias XOR sin pérdida y cuadros completos al menos cada 12 cuadros.
 `portrait_assets.S` lo incorpora al firmware sin generar millones de literales
 C++. `portrait_asset_path.h` contiene la ruta local del banco; ejecutar el
@@ -37,19 +38,20 @@ ajustó después de revisar la fotografía enviada por Nahuel.
 | Acción | Material mostrado |
 | --- | --- |
 | Neutral / despertar | Imagen frontal. |
-| Dormido / dormir / adormecerse / aburrirse / tristeza | Imagen dormido; algunas son equivalencias temporales. |
-| Pensar / confusión / sospecha / enojo | Imagen pensando como equivalencia temporal. |
+| Dormido / dormir / adormecerse | Imagen dormido. |
+| Pensar | Imagen pensando. |
+| Confusión / sospecha / enojo / tristeza / miedo / timidez | Secuencias propias del tramo 02. |
 | Trabajar / mirada suave abajo | Imagen mirando a la PC. |
-| Sorpresa / miedo | Imagen de boca abierta como equivalencia temporal. |
-| Reír | Imagen de boca semiabierta, sin sincronización con voz. |
-| Contento / orgullo | Sonrisa del video vertical. |
-| Alegría / entusiasmo / juego / celebración | Tramo de sonrisa del video vertical, de ida y vuelta. |
+| Aburrirse / sorpresa / orgullo | Entrada y gesto sostenido del tramo 03. |
+| Reír | Secuencia de risa del tramo 03, de ida y vuelta. |
+| Contento / alegría / entusiasmo / juego / celebración | Variantes del material alegre del tramo 03. |
+| Hablar | Secuencia del tramo 04 durante la reproducción de Onyx. |
 | Reposo | Video vertical completo. |
 | Buscar | Video horizontal completo. |
 | Escuchar | Tramo de miradas del video vertical, de ida y vuelta. |
 | Curiosidad | Tramo de mirada arriba del video vertical, de ida y vuelta. |
 | Miradas izquierda / derecha | Recorrido de los cuadros del giro y pose final sostenida. |
-| Miradas arriba / abajo / timidez | Recorrido del giro correspondiente y pose final sostenida. |
+| Miradas arriba / abajo | Recorrido del giro correspondiente y pose final sostenida. |
 
 Las correspondencias completas están en `portrait_routes.h`. En un comando
 combinado con izquierda/derecha, la mirada tiene prioridad visual: todavía no hay
@@ -59,8 +61,8 @@ las secuencias direccionales, sin cancelar el identificador lógico de animació
 cuadro realmente dibujado y los errores del reproductor.
 
 Los archivos del renderizador geométrico anterior se conservan como referencia.
-No se dibujan ni se utiliza Kirby como fallback. No se generan movimientos nuevos
-de boca; se podrán incorporar los siguientes videos sin cambiar los comandos.
+No se dibujan ni se utiliza Kirby como fallback. La boca usa el video del tramo
+04 y acompaña la duración de la voz, sin representar cada fonema exacto.
 
 ## Compilar y cargar
 
@@ -77,10 +79,13 @@ python tools/generate_portrait_firmware.py --refresh-path
 
 Para regenerar el banco porque cambiaron las fuentes, primero reconstruir los
 cuadros locales desde los videos (Pillow, NumPy, SciPy y FFmpeg), y después
-empaquetarlos (Pillow):
+empaquetarlos (Pillow, NumPy y SciPy):
 
 ```powershell
 python tools/prepare_aubar_frames.py --ffmpeg RUTA/ffmpeg.exe
+python tools/prepare_speech_frames.py --stage emotions --ffmpeg RUTA/ffmpeg.exe
+python tools/prepare_speech_frames.py --stage gestures --ffmpeg RUTA/ffmpeg.exe
+python tools/prepare_speech_frames.py --stage speech --ffmpeg RUTA/ffmpeg.exe
 python tools/generate_portrait_firmware.py
 ```
 
@@ -104,8 +109,9 @@ Con el panel desconectado del puerto:
 ```
 
 La primera prueba compara los checksums de los cuadros descomprimidos en la placa
-contra el banco local, comprueba las seis poses, las miradas, ambos videos,
-memoria y avance de cuadros. La segunda comprueba todos los identificadores y
+contra el banco local, comprueba las poses, las miradas, ambos videos base,
+las emociones, los gestos nuevos, el habla, la memoria y el avance de cuadros.
+La segunda comprueba todos los identificadores y
 las combinaciones del panel. Ambas devuelven el dispositivo al modo automático.
 
 Las vistas previas del banco ya cuantizado al tamaño de pantalla están en
