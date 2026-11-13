@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ROOT / "newAUBAR"
+ASSETS = ROOT / "newAUBAR/tramo-01-base-miradas"
 
 
 def cut_background(image, settings):

@@ -36,7 +36,7 @@ def install(target=MODEL_DIR,opener=urllib.request.urlopen,assets=ASSETS):
             partial.replace(path)
         finally:
             partial.unlink(missing_ok=True)
-    print(f'Voz Dora disponible: {target}',flush=True)
+    print(f'Modelo Kokoro disponible: {target}',flush=True)
 
 
 if __name__=='__main__':

@@ -16,7 +16,7 @@ from tools.install_tts_model import install, verified
 
 
 class KokoroAdapterTests(unittest.TestCase):
-    def test_default_engine_uses_dora_and_hidden_python_with_literal_json(self):
+    def test_default_engine_uses_onyx_and_hidden_python_with_literal_json(self):
         process=FakeProcess({'ok':True,'voice':VOICE})
         calls=[]
         def factory(command,**options):
@@ -25,7 +25,7 @@ class KokoroAdapterTests(unittest.TestCase):
             engine=SpeechEngine(KokoroBackend(factory))
             try:
                 text='Hola, <voice>texto</voice>; $(Get-Date).'
-                self.assertEqual(engine.speak(text,volume=25).result(1).id,'ef_dora')
+                self.assertEqual(engine.speak(text,volume=25).result(1).id,'am_onyx')
                 command,options=calls[0]
                 self.assertEqual(Path(command[0]).name,'python.exe')
                 self.assertEqual(Path(command[-1]).name,'kokoro_speech.py')
@@ -50,7 +50,7 @@ class KokoroAdapterTests(unittest.TestCase):
 
 
 class KokoroWorkerTests(unittest.TestCase):
-    def test_local_synthesis_selects_spanish_dora_applies_volume_and_closes_output(self):
+    def test_local_synthesis_uses_native_onyx_applies_volume_and_closes_output(self):
         with tempfile.TemporaryDirectory() as temp:
             directory=Path(temp)
             (directory/'model').write_bytes(b'm')
@@ -68,7 +68,7 @@ class KokoroWorkerTests(unittest.TestCase):
                 samples.__mul__=Mock(return_value='scaled samples')
                 request=dict(action='speak',text='Estoy contento.',volume=30,rate=0)
                 self.assertEqual(kokoro_speech.execute(request),{'ok':True,'voice':VOICE})
-                model.create.assert_called_once_with('Estoy contento.',voice='ef_dora',speed=.95,lang='es')
+                model.create.assert_called_once_with('Estoy contento.',voice='am_onyx',speed=1.0,lang='en-us')
                 samples.__mul__.assert_called_once_with(.3)
                 audio.play.assert_called_once_with('scaled samples',24000)
                 audio.wait.assert_called_once()

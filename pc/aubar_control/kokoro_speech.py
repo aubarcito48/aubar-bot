@@ -34,7 +34,7 @@ def execute(request):
     with redirect_stdout(sys.stderr):
         engine=Kokoro(str(MODEL_DIR/ASSETS[0][0]),str(MODEL_DIR/ASSETS[1][0]))
         samples,sample_rate=engine.create(text,voice=VOICE['id'],
-            speed=max(.5,min(2.0,.95*2**(rate/10))),lang='es')
+            speed=max(.5,min(2.0,2**(rate/10))),lang=VOICE['language'])
         try:
             sd.play(samples*(volume/100),sample_rate)
             sd.wait()

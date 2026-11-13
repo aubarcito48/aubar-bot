@@ -14,6 +14,7 @@ from .catalog import EXPRESSIONS, ANIMATIONS
 from .voice_commands import VoiceAction
 from .automatic_audio import AutomaticCapture
 from .speech import SpeechEngine, SpeechError, SpeechCancelled
+from .tts_assets import VOICE as KOKORO_VOICE
 from .responses import confirmation_text
 from .playback_gate import PlaybackGate
 from .reply_queue import ReplyQueue
@@ -62,6 +63,9 @@ class AubarApp:
         self._capture_query_connection=None
         self.conversation=Conversation()
         self.ai_input=tk.StringVar()
+        self._last_ai_reply=None
+        self._ai_read_text=False
+        self.chat_voice_enabled=tk.BooleanVar(value=False)
         self._ai_conversation_request=None
         self._ai_future=None
         self._ai_cancel_completion_message=None
@@ -81,8 +85,8 @@ class AubarApp:
         self.speech_enabled = tk.BooleanVar(value=True)
         self.speech_volume = tk.DoubleVar(value=80)
         self.speech_volume_label = tk.StringVar(value="80 %")
-        self.speech_message = tk.StringVar(value="Lista para probar la voz en español.")
-        self.speech_voice = tk.StringVar(value="Voz: Dora · Kokoro local (español)")
+        self.speech_message = tk.StringVar(value="Lista para probar la voz de Onyx.")
+        self.speech_voice = tk.StringVar(value=f"Voz: {KOKORO_VOICE['name']} ({KOKORO_VOICE['language']})")
         self._speech_future = None
         self._speech_stop_requested = False
         self._speech_is_test = False
@@ -236,6 +240,7 @@ class AubarApp:
     def reload_groq_configuration(self):
         self._invalidate_ai_turn()
         self.conversation.reset()
+        self._last_ai_reply=None
         state=self.config_loader()
         self.groq_config=state.config
         self.groq_config_message.set(state.message)
@@ -261,8 +266,19 @@ class AubarApp:
         ttk.Label(panel,text="Guardá tu clave en GROQ_API_KEY dentro de .env y recargá. "
             "La clave no se muestra en el panel.",style="Muted.TLabel",wraplength=600).grid(
             row=3,column=0,sticky="ew",pady=(0,12))
+        voice_controls=ttk.Frame(panel)
+        voice_controls.grid(row=4,column=0,sticky="ew",pady=(0,10))
+        self.ai_voice_check=ttk.Checkbutton(voice_controls,text="Activar voz en el chat",
+            variable=self.chat_voice_enabled,command=self.toggle_chat_voice)
+        self.ai_voice_check.grid(row=0,column=0,sticky="w",padx=(0,12))
+        self.ai_read_button=ttk.Button(voice_controls,text="Escuchar respuesta",command=self.read_ai_response)
+        self.ai_read_button.grid(row=0,column=1,padx=(0,8))
+        self.ai_voice_stop_button=ttk.Button(voice_controls,text="Detener voz",command=self.stop_speech)
+        self.ai_voice_stop_button.grid(row=0,column=2)
+        ttk.Label(voice_controls,textvariable=self.speech_voice,style="Muted.TLabel").grid(
+            row=1,column=0,columnspan=3,sticky="w",pady=(5,0))
         question=ttk.Frame(panel)
-        question.grid(row=4,column=0,sticky="ew",pady=(0,8))
+        question.grid(row=5,column=0,sticky="ew",pady=(0,8))
         question.columnconfigure(1,weight=1)
         ttk.Label(question,text="Mensaje").grid(row=0,column=0,padx=(0,8))
         self.ai_entry=ttk.Entry(question,textvariable=self.ai_input,font=("Segoe UI",11))
@@ -273,7 +289,7 @@ class AubarApp:
         self.ai_cancel_button=ttk.Button(question,text="Cancelar",command=self.cancel_ai_query)
         self.ai_cancel_button.grid(row=0,column=3,padx=(8,0))
         response_frame=ttk.Frame(panel)
-        response_frame.grid(row=5,column=0,sticky="nsew")
+        response_frame.grid(row=6,column=0,sticky="nsew")
         response_frame.rowconfigure(0,weight=1);response_frame.columnconfigure(0,weight=1)
         self.ai_response=tk.Text(response_frame,height=4,state="disabled",bg="white",fg=INK,
             font=("Segoe UI",11),wrap="word",relief="flat",padx=12,pady=10)
@@ -281,12 +297,33 @@ class AubarApp:
         scrollbar=ttk.Scrollbar(response_frame,command=self.ai_response.yview)
         scrollbar.grid(row=0,column=1,sticky="ns")
         self.ai_response.configure(yscrollcommand=scrollbar.set)
-        panel.rowconfigure(5,weight=1)
+        panel.rowconfigure(6,weight=1)
         ttk.Label(panel,textvariable=self.ai_message,wraplength=600).grid(
-            row=6,column=0,sticky="ew",pady=(10,6))
+            row=7,column=0,sticky="ew",pady=(10,6))
         ttk.Label(panel,textvariable=self.ai_avatar_message,style="Muted.TLabel",wraplength=600).grid(
-            row=7,column=0,sticky="ew")
+            row=8,column=0,sticky="ew")
         self._ai_controls()
+        self._speech_controls()
+
+    def toggle_chat_voice(self):
+        if self.chat_voice_enabled.get():
+            self.speech_enabled.set(True)
+            self.toggle_speech()
+        else:
+            # Do not replay a response that arrives after muting and re-enabling.
+            if self._ai_origin=='text':
+                self.ai_replies.cancel()
+                if self._speech_is_ai:
+                    self.stop_speech()
+        self._speech_controls()
+
+    def read_ai_response(self):
+        if self.closed or not self._last_ai_reply or self._ai_turn_busy():
+            return
+        if self.speak_text(self._last_ai_reply):
+            self._speech_is_ai=True
+        self._ai_controls()
+        self._speech_controls()
 
     def _ai_controls(self):
         active=self._ai_turn_busy()
@@ -295,6 +332,8 @@ class AubarApp:
         self.ai_entry.configure(state="disabled" if active else "normal")
         cancellable=active or self.audio_phase in ('recognizing','auto_recognizing')
         self.ai_cancel_button.configure(state='normal' if cancellable and self._ai_cancel_completion_message is None else 'disabled')
+        if hasattr(self,'ai_read_button'):
+            self._speech_controls()
 
     def _ai_turn_busy(self):
         return (self._ai_future is not None or self.ai_service.busy or self.ai_replies.pending is not None
@@ -330,6 +369,7 @@ class AubarApp:
     def new_conversation(self):
         self._invalidate_ai_turn()
         self.conversation.reset()
+        self._last_ai_reply=None
         self.ai_input.set('')
         self._show_ai_response('')
         self._cancel_status('Conversación nueva. Aubar no conserva el contexto anterior.')
@@ -355,7 +395,8 @@ class AubarApp:
         self._ai_cancel_completion_message=None
         self._ai_conversation_request=request
         self._ai_origin=origin
-        self._ai_voice_generation=speech_generation
+        self._ai_voice_generation=self.ai_replies.generation if speech_generation is None else speech_generation
+        self._ai_read_text=origin=='text' and self.chat_voice_enabled.get() and self.speech_enabled.get()
         self._ai_connection_token=connection
         self._ai_visual_generation=self._avatar_generation
         self._ai_visual_connection=self.connection_token
@@ -510,12 +551,14 @@ class AubarApp:
                         self._ai_controls()
                         return
                     self._show_ai_response(self.conversation.transcript)
+                    self._last_ai_reply=text
                     if origin=='text':
                         self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
                     self._queue_ai_visual(reply.action,'answer')
                     if origin=='voice':
                         self.recognition_message.set('Respuesta disponible en IA.')
+                    if (origin=='voice' or origin=='text' and self._ai_read_text and self.chat_voice_enabled.get()):
                         if self.speech_enabled.get() and voice_generation==self.ai_replies.generation:
                             self.ai_replies.put(text,self.ai_generation,voice_generation)
                 else:
@@ -586,12 +629,18 @@ class AubarApp:
     def _speech_controls(self):
         active=self._speech_future is not None or self.speech.busy
         pending=self._pending_reply is not None or self.ai_replies.pending is not None
-        ai_waiting=(self._ai_future is not None and self._ai_origin=='voice')
+        ai_waiting=(self._ai_future is not None and (self._ai_origin=='voice' or self._ai_read_text))
         enabled=self.speech_enabled.get()
         ai_voice_waiting=ai_waiting and self._ai_voice_generation==self.ai_replies.generation and enabled
         microphone_busy=self.audio_phase!='idle'
         self.speech_test_button.configure(state="normal" if enabled and not active and not pending and not microphone_busy and not ai_waiting else "disabled")
         self.speech_stop_button.configure(state="normal" if (active or pending or ai_voice_waiting) and not self._speech_stop_requested else "disabled")
+        if hasattr(self,'ai_read_button'):
+            can_read=(self._last_ai_reply is not None and enabled and not active and not pending
+                      and not microphone_busy and not self._ai_turn_busy())
+            self.ai_read_button.configure(state='normal' if can_read else 'disabled')
+            self.ai_voice_stop_button.configure(state='normal' if (active or pending or ai_voice_waiting)
+                                                and not self._speech_stop_requested else 'disabled')
         self.speech_volume_scale.configure(state="normal" if enabled and not active else "disabled")
         self.speech_text.configure(state="normal" if enabled and not active else "disabled")
         if ai_waiting:
@@ -639,7 +688,7 @@ class AubarApp:
 
     def stop_speech(self):
         had_pending=(self._pending_reply is not None or self.ai_replies.pending is not None
-                     or self._ai_future is not None and self._ai_origin=='voice')
+                     or self._ai_future is not None and (self._ai_origin=='voice' or self._ai_read_text))
         self.replies.cancel()
         self.ai_replies.cancel()
         if self.closed or not self.speech.busy and self._speech_future is None:
@@ -658,7 +707,7 @@ class AubarApp:
             if self._speech_future is None and not self.speech.busy:
                 self._speech_message("Voz desactivada.")
         elif self._speech_future is None:
-            self._speech_message("Lista para probar la voz en español.")
+            self._speech_message("Lista para probar la voz de Onyx.")
         self._speech_controls()
 
     def _drain_speech(self):

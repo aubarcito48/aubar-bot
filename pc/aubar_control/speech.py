@@ -1,4 +1,4 @@
-"""Asynchronous local Spanish TTS. Text is independent of avatar commands."""
+"""Asynchronous local TTS. Text is independent of avatar commands."""
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
@@ -25,6 +25,7 @@ class SpeechVoice:
 
 
 class ProcessSpeechBackend:
+    VOICE_LANGUAGES=('es',)
     def __init__(self, process_factory=subprocess.Popen):
         self._factory = process_factory
         self._process = None
@@ -70,7 +71,7 @@ class ProcessSpeechBackend:
                 if response.get('code')=='NO_SPANISH_VOICE':
                     raise SpeechError('No hay una voz SAPI en español disponible. Instalá una voz española compatible en Windows y probá nuevamente.')
                 if response.get('code')=='MODEL_MISSING':
-                    raise SpeechError('Falta el modelo de Dora o está incompleto. Cerrá el panel y abrilo con start_control.ps1 para prepararlo.')
+                    raise SpeechError('Falta el modelo de Kokoro o está incompleto. Cerrá el panel y abrilo con start_control.ps1 para prepararlo.')
                 if response.get('code')=='DEPENDENCY_MISSING':
                     raise SpeechError('Faltan dependencias de la voz local. Cerrá el panel y abrilo con start_control.ps1 para instalarlas.')
                 raise SpeechError('No se pudo reproducir la voz. Revisá la salida de audio y las voces de Windows.')
@@ -128,11 +129,11 @@ class ProcessSpeechBackend:
         response = self._request({'action':'voices'}, cancel_event=cancel_event)
         try:
             voices = [SpeechVoice(**voice) for voice in response['voices']]
-            if not voices or any(not voice.language.startswith('es') for voice in voices):
-                raise ValueError('No Spanish voice')
+            if not voices or any(not voice.language.startswith(self.VOICE_LANGUAGES) for voice in voices):
+                raise ValueError('No compatible voice')
             return voices
         except (KeyError, TypeError, ValueError) as exc:
-            raise SpeechError('No se pudo consultar una voz española compatible.') from exc
+            raise SpeechError('No se pudo consultar una voz compatible.') from exc
 
     def speak(self, text, volume=100, rate=0, *, cancel_event=None):
         response = self._request(
@@ -142,11 +143,11 @@ class ProcessSpeechBackend:
         )
         try:
             voice = SpeechVoice(**response['voice'])
-            if not voice.language.startswith('es'):
-                raise ValueError('Not Spanish')
+            if not voice.language.startswith(self.VOICE_LANGUAGES):
+                raise ValueError('Unsupported voice language')
             return voice
         except (KeyError, TypeError, ValueError) as exc:
-            raise SpeechError('El motor no confirmó una voz española válida.') from exc
+            raise SpeechError('El motor no confirmó una voz válida.') from exc
 
     def stop(self, cancel_event=None):
         with self._lock:
@@ -179,6 +180,7 @@ class SapiBackend(ProcessSpeechBackend):
 
 
 class KokoroBackend(ProcessSpeechBackend):
+    VOICE_LANGUAGES=('es','en')
     def _command(self):
         # pythonw has no console streams; a hidden python.exe supplies JSON pipes.
         executable=Path(sys.executable)

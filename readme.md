@@ -6,13 +6,13 @@ con miradas y control por voz desde el micrófono de la PC.
 
 Se mantienen los 28 identificadores de expresión y las 23 animaciones del panel.
 Las emociones sin imagen propia usan equivalencias temporales, por lo que todavía
-no son 28 expresiones visualmente distintas. Ver [el firmware del retrato](newAUBAR/FIRMWARE_AVATAR.md)
+no son 28 expresiones visualmente distintas. Ver [el firmware del retrato](newAUBAR/tramo-01-base-miradas/guia/FIRMWARE_AVATAR.md)
 para los recursos, las equivalencias, la compilación y la verificación en placa.
 
 El firmware funciona de forma autónoma después de cargarlo: basta con alimentar
 la placa por USB. Para controlarlo por voz se utiliza el panel de la PC;
 también permite conversar con Groq, escuchar las respuestas con la voz local
-Dora y abrir, buscar y reproducir videos de YouTube en el navegador.
+Onyx y abrir, buscar y reproducir videos de YouTube en el navegador.
 
 <img src="docs/images/aubar-retrato-esp32.jpg" alt="Fotografía del retrato animado de Nahuel funcionando en la pantalla del ESP32" width="260">
 
@@ -41,15 +41,25 @@ sin ejecutar comandos.
 Para conversar, copiar `.env.example` a `.env` si todavía no existe ese archivo,
 completar `GROQ_API_KEY` y recargar la configuración en **IA**. La clave permanece
 en el archivo local, excluido de Git. Groq y YouTube necesitan internet; el
-reconocimiento, la voz Dora y los comandos del avatar funcionan localmente.
+reconocimiento, la voz Onyx y los comandos del avatar funcionan localmente.
 
 ## Conversación y YouTube
 
 Se puede decir **«contame algo interesante»** o **«cómo estás»** directamente.
-Las respuestas conservan el contexto de la conversación, se leen con Dora si
+Las respuestas conservan el contexto de la conversación, se leen con Onyx si
 **Activar voz** está marcado y acompañan al avatar con una expresión o animación.
 **Nueva conversación** borra el contexto; **Cancelar** interrumpe el turno pendiente.
 La escucha se pausa mientras Aubar responde y vuelve si la automática sigue activa.
+
+En la pestaña **IA** se puede escribir un mensaje y pulsar **Enviar**. Activar
+**Voz en el chat** mediante la casilla **Activar voz en el chat** para leer
+automáticamente las próximas respuestas. **Escuchar respuesta** reproduce la
+última respuesta recibida y **Detener voz** interrumpe la lectura. El chat y la
+voz pueden usarse sin conectar el ESP32; la placa agrega la expresión visual.
+
+La voz elegida es **`am_onyx`**, con su pronunciación inglesa original y velocidad
+base 1.0. Esta primera prueba no adapta la pronunciación del texto español; esa
+adaptación queda pendiente. Para cargar el cambio, cerrar y volver a abrir el panel.
 
 | Acción | Ejemplo de voz |
 | --- | --- |
@@ -271,12 +281,12 @@ El avatar actual es el retrato de Nahuel, preparado a partir de imágenes y vide
 generados con Gemini. Tiene dos videos de 240 cuadros y seis poses estáticas.
 El banco comprimido `portrait_assets.dat` está incluido en el repositorio.
 
-<img src="newAUBAR/animaciones-sin-fondo/formato%20webp/frente-Photoroom.webp" alt="Retrato actual de Nahuel con anteojos, sentado frente a una computadora" width="220">
+<img src="newAUBAR/tramo-01-base-miradas/animaciones-sin-fondo/formato%20webp/frente-Photoroom.webp" alt="Retrato actual de Nahuel con anteojos, sentado frente a una computadora" width="220">
 
 El avatar geométrico anterior proviene de [Bible Strong Avatar Lab](https://avatars.bible-strong.app/).
 Su exportación y el renderizador se conservan como referencia histórica.
 
-Consultar [la preparación y las equivalencias del retrato](newAUBAR/FIRMWARE_AVATAR.md)
+Consultar [la preparación y las equivalencias del retrato](newAUBAR/tramo-01-base-miradas/guia/FIRMWARE_AVATAR.md)
 para conocer qué recursos representa cada comando y cómo incorporar nuevos videos.
 
 ## Instalación y carga con Arduino CLI
@@ -417,8 +427,8 @@ ya está incluido en el firmware.
 
 ## Preparar nuevos recursos del avatar
 
-Para ampliar imágenes y videos, seguir [la guía del firmware](newAUBAR/FIRMWARE_AVATAR.md)
-y [la preparación de cuadros](newAUBAR/frames-preparados/README.md). El proceso
+Para ampliar imágenes y videos, seguir [la guía del firmware](newAUBAR/tramo-01-base-miradas/guia/FIRMWARE_AVATAR.md)
+y [la preparación de cuadros](newAUBAR/tramo-01-base-miradas/frames-preparados/README.md). El proceso
 extrae cuadros con FFmpeg y Python y genera explícitamente un nuevo banco. No se
 ejecuta al abrir el panel ni al compilar.
 
@@ -436,7 +446,7 @@ arriba y pensando con la mano en el rostro.
 
 Esta hoja adicional muestra los cuadros preparados para la pantalla:
 
-<img src="newAUBAR/frames-preparados/vertical/poses.jpg" alt="Cuadros del retrato: frente, giros, parpadeo, miradas y sonrisa" width="640">
+<img src="newAUBAR/tramo-01-base-miradas/frames-preparados/vertical/poses.jpg" alt="Cuadros del retrato: frente, giros, parpadeo, miradas y sonrisa" width="640">
 
 ### Versión anterior: avatar geométrico
 
@@ -456,7 +466,7 @@ videos, las 51 opciones individuales y las 153 combinaciones del catálogo USB.
 Se detectaron 8 MB de PSRAM y cero errores de descompresión. Queda pendiente pulir
 un halo claro leve visible en algunos contornos y ampliar las animaciones.
 
-El detalle está en [el registro del firmware](newAUBAR/FIRMWARE_AVATAR.md).
+El detalle está en [el registro del firmware](newAUBAR/tramo-01-base-miradas/guia/FIRMWARE_AVATAR.md).
 
 ### Comprobaciones anteriores
 

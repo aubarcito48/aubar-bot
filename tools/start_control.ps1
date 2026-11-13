@@ -31,7 +31,7 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el modelo local de espanol.' }
 
 & $kirbyPython (Join-Path $kirbyRoot 'tools\install_tts_model.py')
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la voz local de Dora.' }
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la voz local de Kokoro.' }
 
 # This is the interactive application requested by the user; pythonw avoids
 # a separate console while leaving the desktop window visible.

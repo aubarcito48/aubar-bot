@@ -41,7 +41,7 @@ Aquí se usa una máscara local por silueta: detecta el personaje dentro de una 
 
 La transparencia es una primera preparación utilizable para revisar; el contorno del cabello, los brazos y la computadora puede requerir retoques. La franja del escritorio se conserva deliberadamente, al igual que en las imágenes sin fondo aportadas. Las copias con fondo permiten cambiar la máscara sin extraer otra vez el video.
 
-No se generaron movimientos nuevos ni boca animada. Las bocas disponibles son imágenes estáticas. Estos recursos ya se incorporaron al nuevo firmware del ESP32; ver [implementación y comprobaciones en placa](../FIRMWARE_AVATAR.md).
+No se generaron movimientos nuevos ni boca animada. Las bocas disponibles son imágenes estáticas. Estos recursos ya se incorporaron al nuevo firmware del ESP32; ver [implementación y comprobaciones en placa](../guia/FIRMWARE_AVATAR.md).
 
 ## Reproducir la preparación
 

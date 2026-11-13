@@ -2,7 +2,7 @@
 
 ## Material vigente después del reinicio
 
-**Videos recibidos y extracción preparada:** ver [Cuadros preparados](./frames-preparados/README.md). Hay dos fuentes independientes con 240 cuadros cada una, atlas WebP y secuencias por movimiento. Las seis imágenes estáticas están incluidas aparte. El firmware del retrato ya está implementado y cargado; ver [registro y correspondencias](./FIRMWARE_AVATAR.md). Las nuevas emociones y la boca animada quedan para futuros recursos.
+**Videos recibidos y extracción preparada:** ver [Cuadros preparados](../frames-preparados/README.md). Hay dos fuentes independientes con 240 cuadros cada una, atlas WebP y secuencias por movimiento. Las seis imágenes estáticas están incluidas aparte. El firmware del retrato ya está implementado y cargado; ver [registro y correspondencias](./FIRMWARE_AVATAR.md). Las nuevas emociones y la boca animada quedan para futuros recursos.
 
 Se reinició la creación del avatar desde una nueva referencia personal de Nahuel, siguiendo el proceso de IsaBot: resolver las imágenes, generar un video coherente y extraer sus cuadros. Las instrucciones anteriores sobre `nahue_pick.png` y las 28 imágenes quedan como historial; no son requisitos para continuar.
 
@@ -15,7 +15,7 @@ Hay seis poses nuevas: `frente`, `mira-pc`, `pensando`, `dormido`, `boca-semi-ab
 | `animaciones-sin-fondo/formato png` | Fuentes sin fondo que se conservan; no se usan en la aplicación. |
 | `animaciones-sin-fondo/formato webp` | Imágenes sin fondo elegidas para usar en Botbar. |
 
-Los dos videos nuevos ya están disponibles en esta carpeta. El prompt anterior de `PRIMER_VIDEO_PRUEBA.md` se conserva como historial. El estado de la integración y la revisión de pantalla se registra en `FIRMWARE_AVATAR.md`.
+Los dos videos nuevos ya están disponibles en `../videos/`. El prompt anterior de `PRIMER_VIDEO_PRUEBA.md` se conserva como historial. El estado de la integración y la revisión de pantalla se registra en `FIRMWARE_AVATAR.md`.
 
 ---
 
@@ -27,7 +27,7 @@ Esta guía registra lo que acordamos para preparar el nuevo avatar. Primero crea
 
 ## 1. Personaje y estilo elegidos
 
-La referencia es [nahue_pick.png](./nahue_pick.png).
+La referencia es [nahue_pick.png](../../nahue_pick.png).
 
 El estilo es **anime semirrealista con pintura digital**: proporciones naturales, rasgos suavizados de anime y sombreado con volumen, como una ilustración de personaje de videojuego.
 

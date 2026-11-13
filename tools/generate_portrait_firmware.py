@@ -9,7 +9,7 @@ import json
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "newAUBAR"
+SOURCE = ROOT / "newAUBAR/tramo-01-base-miradas"
 DEST = ROOT / "firmware/KirbyPantalla"
 WIDTH, HEIGHT = 172, 320
 BACKGROUND = (13, 17, 23)

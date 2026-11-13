@@ -5,7 +5,7 @@
   "clips": [
     {
       "id": "horizontal",
-      "source": "gemini_generated_video_5538cfc5.mp4",
+      "source": "videos/gemini_generated_video_5538cfc5.mp4",
       "size": [
         320,
         320
@@ -997,7 +997,7 @@
     },
     {
       "id": "vertical",
-      "source": "gemini_generated_video_f23deb6e.mp4",
+      "source": "videos/gemini_generated_video_f23deb6e.mp4",
       "size": [
         180,
         320
