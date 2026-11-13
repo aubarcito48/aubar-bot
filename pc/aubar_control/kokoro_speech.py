@@ -11,6 +11,7 @@ import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from pc.aubar_control.tts_assets import ASSETS, MODEL_DIR, VOICE
 from pc.aubar_control.speech_pronunciation import pronunciation_language, speech_speed
+from pc.aubar_control.ai_avatar import parse_segments
 
 
 def execute(request):
@@ -28,6 +29,10 @@ def execute(request):
         or type(rate) is not int or not -10<=rate<=10):
         return {'ok':False,'code':'INVALID_REQUEST'}
     try:
+        segments=parse_segments(request['segments'],text) if 'segments' in request else ()
+    except (ValueError,TypeError):
+        return {'ok':False,'code':'INVALID_REQUEST'}
+    try:
         from kokoro_onnx import Kokoro
         import sounddevice as sd
     except ImportError:
@@ -35,15 +40,32 @@ def execute(request):
     # Model/tokenizer libraries may log; stdout must remain a single JSON result.
     with redirect_stdout(sys.stderr):
         engine=Kokoro(str(MODEL_DIR/ASSETS[0][0]),str(MODEL_DIR/ASSETS[1][0]))
-        samples,sample_rate=engine.create(text,voice=VOICE['id'],
-            speed=speech_speed(rate),lang=pronunciation_language(text))
+        timeline=[]
+        if segments:
+            import numpy as np
+            parts=[];offset=0
+            for segment in segments:
+                samples,sample_rate=engine.create(segment.text,voice=VOICE['id'],
+                    speed=max(.5,min(2.0,speech_speed(rate)*segment.speed)),lang=pronunciation_language(segment.text))
+                spoken=len(samples)/sample_rate
+                pause=segment.pause_ms/1000
+                parts.append(np.clip(samples*segment.energy,-.98,.98))
+                parts.append(np.zeros(round(sample_rate*pause),dtype=np.float32))
+                timeline.append({'from':offset,'speech_end':offset+spoken,'until':offset+spoken+pause,
+                    'avatar_type':'animation' if segment.action.command=='ANIMATION' else 'expression',
+                    'avatar_id':segment.action.argument,'delivery':segment.delivery})
+                offset+=spoken+pause
+            samples=np.concatenate(parts)
+        else:
+            samples,sample_rate=engine.create(text,voice=VOICE['id'],
+                speed=speech_speed(rate),lang=pronunciation_language(text))
         try:
             sd.play(samples*(volume/100),sample_rate)
             marker = request.get('playback_state')
             if marker:
                 started = time.monotonic()
                 Path(marker).write_text(json.dumps({'start': started,
-                    'end': started + len(samples)/sample_rate}), encoding='utf-8')
+                    'end': started + len(samples)/sample_rate,'timeline':timeline}), encoding='utf-8')
             sd.wait()
         finally:
             sd.stop()

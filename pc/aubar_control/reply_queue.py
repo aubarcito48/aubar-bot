@@ -9,6 +9,7 @@ class PendingReply:
     generation: int
     text: str
     created_at: float
+    performance: object=None
 
 
 class ReplyQueue:
@@ -26,10 +27,10 @@ class ReplyQueue:
             self._pending=None
         return self._pending
 
-    def put(self, text, connection, generation):
+    def put(self, text, connection, generation, *, performance=None):
         if generation!=self.generation:
             return False
-        self._pending=PendingReply(connection,generation,text,self.clock())
+        self._pending=PendingReply(connection,generation,text,self.clock(),performance)
         return True
 
     def peek(self, connection):

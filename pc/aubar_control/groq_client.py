@@ -56,7 +56,7 @@ class GroqClient:
             'model':config.model,
             'messages':[{'role':message.role,'content':message.content.replace(config.api_key,'[credencial oculta]')}
                         for message in messages],
-            'max_completion_tokens':512,
+            'max_completion_tokens':1024 if isinstance(text,ConversationRequest) else 512,
             'stream':False,
         }
         if isinstance(text,ConversationRequest):
@@ -197,7 +197,8 @@ class GroqService:
             answer=self.client.complete(config,text,cancel_event=cancel)
             if isinstance(text,ConversationRequest):
                 reply=normalize_reply(answer)
-                result=AvatarReply(reply.text.replace(config.api_key,'[credencial oculta]'),reply.action,reply.fallback)
+                result=normalize_reply(AvatarReply(reply.text.replace(config.api_key,'[credencial oculta]'),reply.action,reply.fallback,
+                    tuple(type(s)(s.text.replace(config.api_key,'[credencial oculta]'),s.action,s.delivery.replace(config.api_key,'[credencial oculta]'),s.speed,s.energy,s.pause_ms) for s in reply.segments)))
             elif not isinstance(answer,str) or not answer.strip() or len(answer)>2000:
                 error='La respuesta de Groq no tiene un formato válido.'
             else:

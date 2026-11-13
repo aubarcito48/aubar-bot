@@ -69,8 +69,8 @@ class UsbControl {
         case UsbCommandType::Portrait:
           if(!portrait_) snprintf(response_,sizeof(response_),"OK PORTRAIT ready=0\n");
           else snprintf(response_,sizeof(response_),
-            "OK PORTRAIT ready=%u frame=%u drawn=%lu errors=%lu checksum=%lu max_us=%lu psram=%lu\n",
-            portrait_->ready,portrait_->frame,
+            "OK PORTRAIT ready=%u frame=%u face=%u drawn=%lu errors=%lu checksum=%lu max_us=%lu psram=%lu\n",
+            portrait_->ready,portrait_->frame,portrait_->face,
             static_cast<unsigned long>(portrait_->drawn),static_cast<unsigned long>(portrait_->errors),
             static_cast<unsigned long>(portrait_->checksum),static_cast<unsigned long>(portrait_->maxFrameUs),
             static_cast<unsigned long>(portrait_->psramBytes));

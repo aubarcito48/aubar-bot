@@ -137,9 +137,12 @@ class ProcessSpeechBackend:
         except (KeyError, TypeError, ValueError) as exc:
             raise SpeechError('No se pudo consultar una voz compatible.') from exc
 
-    def speak(self, text, volume=100, rate=0, *, cancel_event=None):
+    def speak(self, text, volume=100, rate=0, *, cancel_event=None, performance=None):
+        payload={'action':'speak','text':text,'volume':volume,'rate':rate}
+        if performance:
+            payload['segments']=performance
         response = self._request(
-            {'action':'speak','text':text,'volume':volume,'rate':rate},
+            payload,
             timeout=max(30, min(300, len(text)*.3+15)),
             cancel_event=cancel_event,
         )
@@ -183,18 +186,37 @@ class SapiBackend(ProcessSpeechBackend):
 
 class KokoroBackend(ProcessSpeechBackend):
     VOICE_LANGUAGES=('es','en')
+    supports_performance=True
     _playback_state = None
 
     @property
-    def playing(self):
+    def playback(self):
         path = self._playback_state
         if path is None:
-            return False
+            return {}
         try:
             state = json.loads(path.read_text(encoding='utf-8'))
-            return state['start'] <= time.monotonic() < state['end']
+            return state if state['start'] <= time.monotonic() < state['end'] else {}
         except (OSError, ValueError, KeyError, TypeError):
-            return False
+            return {}
+
+    @property
+    def playing(self):
+        return bool(self.playback)
+
+    @property
+    def performance(self):
+        state=self.playback
+        elapsed=time.monotonic()-state.get('start',0)
+        for index,segment in enumerate(state.get('timeline',[])):
+            if segment['from']<=elapsed<segment['until']:
+                return {**segment,'index':index,'articulating':elapsed<segment['speech_end']}
+        return None
+
+    @property
+    def articulating(self):
+        segment=self.performance
+        return segment['articulating'] if segment else self.playing
 
     def _request(self, payload, *args, **kwargs):
         if payload.get('action') != 'speak':
@@ -243,6 +265,14 @@ class SpeechEngine:
                       and not self._future.done())
         return active and bool(getattr(self.backend, 'playing', False))
 
+    @property
+    def performance(self):
+        return getattr(self.backend,'performance',None) if self.playing else None
+
+    @property
+    def articulating(self):
+        return self.playing and bool(getattr(self.backend,'articulating',True))
+
     def _submit(self, operation):
         with self._lock:
             if self._closed:
@@ -257,11 +287,17 @@ class SpeechEngine:
     def voices(self):
         return self._submit(lambda cancel:self.backend.voices(cancel_event=cancel))
 
-    def speak(self, text, *, volume=100, rate=0):
+    def speak(self, text, *, volume=100, rate=0, performance=None):
         if not isinstance(text, str) or not text.strip() or len(text)>self.MAX_TEXT_LENGTH or '\x00' in text:
             raise SpeechError('El texto de voz debe tener entre 1 y 2000 caracteres y no contener NUL.')
         if type(volume) is not int or not 0<=volume<=100 or type(rate) is not int or not -10<=rate<=10:
             raise SpeechError('El volumen debe estar entre 0 y 100 y la velocidad entre -10 y 10.')
+        if performance:
+            from .ai_avatar import parse_segments
+            payload=[segment.payload() for segment in performance]
+            parse_segments(payload,text)
+            if getattr(self.backend,'supports_performance',False):
+                return self._submit(lambda cancel:self.backend.speak(text,volume,rate,cancel_event=cancel,performance=payload))
         return self._submit(lambda cancel:self.backend.speak(text,volume,rate,cancel_event=cancel))
 
     def stop(self):

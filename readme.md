@@ -76,6 +76,12 @@ propios para sospecha, confusión, enojo, tristeza, miedo y timidez.
 El [tramo 03](newAUBAR/tramo-03-gestos-restantes/guia/INTEGRACION.md) agrega
 aburrimiento, sorpresa, orgullo, risa y variantes de alegría, juego y celebración.
 
+Groq puede dirigir una [interpretación contextual](docs/INTERPRETACION_CONTEXTUAL.md):
+elige gestos y ajustes de ritmo, energía y pausas junto con el texto. El panel
+ejecuta el plan siguiendo el audio y conserva la emoción durante el movimiento
+de boca. Onyx aproxima la intención con esos controles; no ofrece actuación
+emocional nativa.
+
 | Acción | Ejemplo de voz |
 | --- | --- |
 | Abrir YouTube | «abrí YouTube» |

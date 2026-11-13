@@ -91,6 +91,8 @@ class AubarApp:
         self._speech_future = None
         self._speech_avatar_sent = False
         self._speech_avatar_at = 0.0
+        self._speech_plan_key = None
+        self._last_ai_performance = None
         self._speech_stop_requested = False
         self._speech_is_test = False
         self.reply_provider = reply_provider
@@ -244,6 +246,7 @@ class AubarApp:
         self._invalidate_ai_turn()
         self.conversation.reset()
         self._last_ai_reply=None
+        self._last_ai_performance=None
         state=self.config_loader()
         self.groq_config=state.config
         self.groq_config_message.set(state.message)
@@ -323,7 +326,10 @@ class AubarApp:
     def read_ai_response(self):
         if self.closed or not self._last_ai_reply or self._ai_turn_busy():
             return
-        if self.speak_text(self._last_ai_reply):
+        performance=self._last_ai_performance
+        if performance:
+            self._queue_ai_visual(performance.action,'answer')
+        if self.speak_text(self._last_ai_reply,performance=performance):
             self._speech_is_ai=True
         self._ai_controls()
         self._speech_controls()
@@ -373,6 +379,7 @@ class AubarApp:
         self._invalidate_ai_turn()
         self.conversation.reset()
         self._last_ai_reply=None
+        self._last_ai_performance=None
         self.ai_input.set('')
         self._show_ai_response('')
         self._cancel_status('Conversación nueva. Aubar no conserva el contexto anterior.')
@@ -446,7 +453,7 @@ class AubarApp:
             or self._pending_ai_avatar is not None or self._ai_avatar_inflight):
             return
         self.ai_replies.take(self.ai_generation)
-        if self.speak_text(reply.text):
+        if self.speak_text(reply.text,performance=reply.performance):
             self._speech_is_ai=True
             self.recognition_message.set('Aubar está hablando. La respuesta completa está en IA.')
         else:
@@ -555,6 +562,7 @@ class AubarApp:
                         return
                     self._show_ai_response(self.conversation.transcript)
                     self._last_ai_reply=text
+                    self._last_ai_performance=reply
                     if origin=='text':
                         self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
@@ -563,7 +571,7 @@ class AubarApp:
                         self.recognition_message.set('Respuesta disponible en IA.')
                     if (origin=='voice' or origin=='text' and self._ai_read_text and self.chat_voice_enabled.get()):
                         if self.speech_enabled.get() and voice_generation==self.ai_replies.generation:
-                            self.ai_replies.put(text,self.ai_generation,voice_generation)
+                            self.ai_replies.put(text,self.ai_generation,voice_generation,performance=reply)
                 else:
                     transcript=self.conversation.transcript
                     self._show_ai_response(transcript+'\n\nPrueba de conexión: '+text if transcript else text)
@@ -663,7 +671,7 @@ class AubarApp:
         if not self.closed:
             self.speak_text(self.speech_text.get("1.0","end-1c"),is_test=True)
 
-    def speak_text(self, text, *, is_test=False):
+    def speak_text(self, text, *, is_test=False, performance=None):
         if self.closed or not self.speech_enabled.get() or self._speech_future is not None or self.speech.busy:
             return False
         if self.audio_phase!='idle':
@@ -672,7 +680,11 @@ class AubarApp:
         self._speech_playback_token=self.playback_gate.begin()
         self.automatic_capture.pause()
         try:
-            self._speech_future=self.speech.speak(text,volume=round(self.speech_volume.get()))
+            options={'volume':round(self.speech_volume.get())}
+            if performance and performance.segments:
+                options['performance']=performance.segments
+            self._speech_plan_key=None
+            self._speech_future=self.speech.speak(text,**options)
         except SpeechError as error:
             self.playback_gate.finish(self._speech_playback_token)
             self._speech_playback_token=None
@@ -1379,12 +1391,26 @@ class AubarApp:
             return
         if getattr(self.session,'speech_supported',None) is False:
             return
-        playing = bool(getattr(self.speech,'playing',False))
+        playing = bool(getattr(self.speech,'articulating',getattr(self.speech,'playing',False)))
         now = time.monotonic()
         if playing != self._speech_avatar_sent or playing and now-self._speech_avatar_at>=0.7:
             self._speech_avatar_sent = playing
             self._speech_avatar_at = now
             self._submit('speech_avatar', lambda: self.session.set_speaking(playing))
+
+    def _follow_performance(self):
+        segment=getattr(self.speech,'performance',None)
+        if not self._speech_is_ai or not segment:
+            return
+        key=(segment['index'],segment['avatar_type'],segment['avatar_id'])
+        if key==self._speech_plan_key:
+            return
+        self._speech_plan_key=key
+        command={'animation':'ANIMATION','expression':'EXPRESSION'}.get(segment['avatar_type'])
+        action,fallback=safe_avatar_action(command,segment['avatar_id'])
+        if not fallback:
+            self._queue_ai_visual(action,'answer')
+            self._speech_message('Interpretación: '+segment['delivery']+' · Onyx: ritmo, energía y pausas.')
 
     def _drain(self):
         try:
@@ -1463,6 +1489,7 @@ class AubarApp:
         self._drain_audio()
         self._drain_ai()
         self._drain_speech()
+        self._follow_performance()
         self._drain_reply()
         self._drain_ai_reply()
         self._speech_controls()
