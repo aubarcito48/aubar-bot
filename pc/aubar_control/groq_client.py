@@ -1,5 +1,6 @@
 """Bounded Groq text requests over verified HTTPS, isolated from the Tk thread."""
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 import http.client
 import json
 import socket
@@ -46,6 +47,31 @@ class GroqClient:
         self._active_socket=None
 
     def complete(self,config,text,*,cancel_event=None):
+        if not isinstance(text,ConversationRequest):
+            return self._complete_once(config,text,cancel_event=cancel_event)
+        cancel=cancel_event if cancel_event is not None else Event()
+        deadline=time.monotonic()+config.timeout_seconds
+        answer=self._complete_once(config,text,cancel_event=cancel,content_only=True)
+        remaining=deadline-time.monotonic()
+        if cancel.is_set():
+            raise GroqCancelled('Consulta cancelada.')
+        if remaining<=0:
+            raise GroqError('La consulta a Groq agotó el tiempo de espera. Podés iniciar una prueba nueva.')
+        # The director receives the full context, but cannot rewrite the answer.
+        try:
+            reply=self._complete_once(replace(config,timeout_seconds=remaining),text,
+                cancel_event=cancel,performance_text=answer)
+        except GroqCancelled:
+            raise
+        except GroqError:
+            if cancel.is_set():
+                raise GroqCancelled('Consulta cancelada.')
+            return normalize_reply(answer)
+        if ' '.join(reply.text.split())!=' '.join(answer.split()):
+            return normalize_reply(answer)
+        return reply
+
+    def _complete_once(self,config,text,*,cancel_event=None,content_only=False,performance_text=None):
         if isinstance(text,ConversationRequest):
             messages=text.messages
         else:
@@ -56,17 +82,50 @@ class GroqClient:
             'model':config.model,
             'messages':[{'role':message.role,'content':message.content.replace(config.api_key,'[credencial oculta]')}
                         for message in messages],
-            'max_completion_tokens':1024 if isinstance(text,ConversationRequest) else 512,
+            'max_completion_tokens':1536 if content_only else 1024 if isinstance(text,ConversationRequest) else 512,
             'stream':False,
         }
         if isinstance(text,ConversationRequest):
-            payload['messages'][0]['content']+='\n'+AVATAR_INSTRUCTIONS
-            payload['response_format']=(
-                {'type':'json_schema','json_schema':{'name':'aubar_reply','strict':True,'schema':AVATAR_SCHEMA}}
-                if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b','qwen/qwen3.8-27b','meta-models/muse-spark-open')
-                else {'type':'json_object'})
+            payload['temperature']=.6
+            if content_only:
+                payload['messages'][0]['content']=(
+                    'You are Aubar, a friendly desktop assistant. Reply in natural Argentine Spanish with voseo '
+                    'unless the user requests English. Answer the latest user request using the conversation context. '
+                    'Return only the words to be spoken, without JSON, stage directions or descriptions of your acting. '
+                    'If the user asks you to say a phrase in a particular emotional style, say the complete requested '
+                    'phrase itself. Do not echo the instruction or the name of the emotional style. '
+                    'This applies even to informal messages without quotation marks. '
+                    'The requested phrase can contain multiple sentences: do not stop copying it at its first exclamation mark or period. '
+                    'For example, "say sadly good morning! how are you?" asks you to say "Good morning! How are you?", '
+                    'not "sadly good morning" and not only "Good morning". '
+                    'For a mixed message containing a greeting and a request to say something, prioritize the requested phrase. '
+                    'Never replace the requested phrase with a stereotypical angry, happy or sad utterance. '
+                    'A previous assistant message is not evidence about the real world or the user. '
+                    'If challenged about an unsupported claim you made, acknowledge and correct your mistake; '
+                    'do not invent locations or explanations to justify it. Ask briefly if truly ambiguous. '
+                    'Keep ordinary replies short. Do not claim to have performed unconfirmed actions. '
+                    'For YouTube actions, explain the local commands: abrir YouTube, buscar videos de [tema] en YouTube, '
+                    'or poner [tema] en YouTube. You do not open the browser through this reply.')
+            else:
+                # The approved text is immutable, so the director needs the
+                # dialogue and its own instructions, not a second content task.
+                payload['messages'][0]['content']=AVATAR_INSTRUCTIONS
+                payload['messages'].append({'role':'assistant','content':performance_text})
+                payload['messages'].append({'role':'user','content':
+                    'Prepará únicamente la interpretación de la respuesta que acabás de dar. '
+                    'No vuelvas a contestar la conversación. Conservá exactamente este texto aprobado, '
+                    'incluidas todas sus palabras, y dividilo en fragments solo si cambia la intención. '
+                    'Usá la emoción y el estilo pedidos en la conversación original. '
+                    'El campo text debe ser exactamente: '+json.dumps(performance_text,ensure_ascii=False)})
+                payload['response_format']=(
+                    {'type':'json_schema','json_schema':{'name':'aubar_reply','strict':True,'schema':AVATAR_SCHEMA}}
+                    if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b','qwen/qwen3.8-27b','meta-models/muse-spark-open')
+                    else {'type':'json_object'})
         if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b'):
-            payload.update(reasoning_effort='low',include_reasoning=False)
+            payload.update(reasoning_effort='medium' if content_only else 'low',include_reasoning=False)
+            for message in payload['messages']:
+                if message['role']=='system':
+                    message['role']='developer'
         connection=None
         error=None
         answer=None
@@ -117,7 +176,7 @@ class GroqClient:
                 content=choice['message']['content']
                 if choice.get('finish_reason')!='stop' or not isinstance(content,str) or not content.strip():
                     error='Groq devolvió una respuesta vacía, incompleta o demasiado larga. Podés iniciar otra prueba.'
-                elif isinstance(text,ConversationRequest):
+                elif isinstance(text,ConversationRequest) and not content_only:
                     answer=parse_avatar_reply(content.replace(config.api_key,'[credencial oculta]'))
                 elif len(content)>2000:
                     error='Groq devolvió una respuesta demasiado larga. Podés iniciar otra prueba.'
@@ -149,6 +208,7 @@ class GroqClient:
         return answer
 
     def cancel(self,cancel_event):
+        cancel_event.set()
         with self._lock:
             if self._active_cancel is not cancel_event:
                 return

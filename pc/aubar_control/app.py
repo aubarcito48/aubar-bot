@@ -566,6 +566,8 @@ class AubarApp:
                     if origin=='text':
                         self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
+                    if reply.fallback:
+                        self.ai_message.set('Respuesta recibida. No se pudo preparar la interpretación; se usa un gesto neutral.')
                     self._queue_ai_visual(reply.action,'answer')
                     if origin=='voice':
                         self.recognition_message.set('Respuesta disponible en IA.')

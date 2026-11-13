@@ -46,24 +46,31 @@ class AvatarReplyTests(unittest.TestCase):
     def test_conversation_uses_schema_and_probe_keeps_plain_text(self):
         conversation=Conversation();request=conversation.prepare('Hola')
         connection=Connection(completion(structured()))
-        reply=GroqClient(lambda *a,**k:connection).complete(CONFIG,request)
+        content=Connection(completion('Respuesta humana.'))
+        connections=iter((content,connection))
+        reply=GroqClient(lambda *a,**k:next(connections)).complete(CONFIG,request)
         self.assertEqual(reply.action.argument,'contento')
         body=json.loads(connection.requests[0][1]['body'])
         self.assertTrue(body['response_format']['json_schema']['strict'])
         self.assertIn('JSON',body['messages'][0]['content'])
+        self.assertNotIn('response_format',json.loads(content.requests[0][1]['body']))
+        self.assertEqual(body['messages'][-2]['content'],'Respuesta humana.')
         probe=Connection()
         self.assertIsInstance(GroqClient(lambda *a,**k:probe).complete(CONFIG,'Prueba'),str)
         self.assertNotIn('response_format',json.loads(probe.requests[0][1]['body']))
 
-    def test_malformed_structured_response_is_safe_error_and_other_models_use_json_mode(self):
+    def test_malformed_direction_keeps_good_text_and_other_models_use_json_mode(self):
         request=Conversation().prepare('Hola')
         connection=Connection(completion('not JSON '+KEY))
-        with self.assertRaises(GroqError) as caught:
-            GroqClient(lambda *a,**k:connection).complete(CONFIG,request)
-        self.assertNotIn(KEY,str(caught.exception))
+        connections=iter((Connection(completion('Texto correcto.')),connection))
+        reply=GroqClient(lambda *a,**k:next(connections)).complete(CONFIG,request)
+        self.assertEqual(reply.text,'Texto correcto.')
+        self.assertTrue(reply.fallback)
+        self.assertNotIn(KEY,reply.text)
         from pc.aubar_control.config import GroqConfig
         connection=Connection(completion(structured()))
-        GroqClient(lambda *a,**k:connection).complete(GroqConfig(KEY,'other/model',2),request)
+        connections=iter((Connection(completion('Respuesta humana.')),connection))
+        GroqClient(lambda *a,**k:next(connections)).complete(GroqConfig(KEY,'other/model',2),request)
         self.assertEqual(json.loads(connection.requests[0][1]['body'])['response_format'],{'type':'json_object'})
 
 

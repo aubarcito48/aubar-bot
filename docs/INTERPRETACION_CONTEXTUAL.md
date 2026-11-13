@@ -32,6 +32,30 @@ Las instrucciones distinguen actuar una emoción de describirla: una frase de
 frase, sin agregar consejos. Se usa un solo fragmento para frases cortas y solo
 se divide cuando conviene cambiar la intención o introducir una pausa.
 
+## Contenido antes de actuación
+
+La conversación se resuelve primero como texto, sin el catálogo de animaciones
+ni la obligación de construir un plan JSON. Una segunda llamada a Groq recibe
+el diálogo y ese texto fijado para preparar la actuación. El director no puede
+cambiar las palabras: la aplicación compara ambos textos antes de aceptarlo.
+
+Si la segunda etapa falla, excede la cuota o intenta sustituir el contenido, se
+conserva la primera respuesta con una interpretación neutral y el panel lo
+informa. No hay reintentos automáticos. Ambas etapas comparten el tiempo máximo
+configurado y la misma cancelación. La prueba de conexión sigue usando una sola
+llamada; una respuesta de conversación ahora usa dos llamadas y más cuota.
+
+En GPT-OSS las instrucciones de aplicación se envían como `developer`. La etapa
+de contenido usa razonamiento medio y la de actuación usa razonamiento bajo.
+Ver [formato Harmony](https://github.com/openai/openai-cookbook/blob/main/articles/openai-harmony.md)
+y [controles de razonamiento de Groq](https://console.groq.com/docs/reasoning).
+
+Esto impide que la preparación de voz reescriba una respuesta, pero no garantiza
+que el primer texto sea correcto: el modelo todavía puede interpretar mal una
+petición informal. En la regresión del saludo sin comillas omitió la última
+oración. Con `decime enojado: "bien nahuel! estoy bien!"` conservó ambas oraciones
+y eligió enojo. Para repetición exacta de varias frases conviene delimitarlas.
+
 ## Voz y tiempos
 
 Se conserva `am_onyx`, en español e inglés. Groq controla:
@@ -90,8 +114,10 @@ otro motor porque Aubar debe conservar español e inglés y la voz elegida.
 
 ## Validación
 
-- 234 pruebas locales aprobadas, incluidas validación del plan, temporización,
+- 238 pruebas locales aprobadas, incluidas validación del plan, temporización,
   silencios, cambios de gesto, repetición y cancelación.
+- Texto inmutable ante un director que intenta cambiarlo, fallo de la segunda
+  etapa, cancelación entre etapas y tiempo máximo compartido comprobados.
 - Prueba real con Groq y el panel: petición literal de enojo, texto preservado,
   `animation:angry`, intención «en tono furioso», energía 1.2.
 - Audio real de Onyx y ESP32: rostro de enojo 778 conservado y 17 cuadros de
