@@ -1,4 +1,4 @@
-"""Pack supplied portraits into a shared-palette, zlib-compressed ESP32 asset bank.
+"""Pack portraits with a shared palette and lossless keyframe/XOR zlib compression.
 
 Explicit authoring operation. No network, image generation or source modifications.
 Run again after moving the checkout: the assembly include uses an absolute path.
@@ -45,6 +45,7 @@ def main():
         ("Stills", [SOURCE / "animaciones-sin-fondo/formato webp" / f"{n}-Photoroom.webp"
                     for n in ["frente", "mira-pc", "pensando", "dormido", "boca-semi-abierta", "boca-abierta"]]),
         ("Speech", [ROOT / "newAUBAR/tramo-04-hablar/frames-preparados/hablar/sin-fondo" / f"{i:03d}.webp" for i in range(36,216)]),
+        ("Emotions", [ROOT / "newAUBAR/tramo-02-emociones/frames-preparados/emociones/sin-fondo" / f"{i:03d}.webp" for i in range(240)]),
     ]
     # A single palette prevents independent quantizers from changing skin colors
     # between adjacent frames. No dithering: avoid temporal speckles at LCD size.
@@ -57,21 +58,36 @@ def main():
     rgb_palette = palette.getpalette()
     colors = [((rgb_palette[i] >> 3) << 11) | ((rgb_palette[i+1] >> 2) << 5)
               | (rgb_palette[i+2] >> 3) for i in range(0, 768, 3)]
-    offsets, lengths, records, previews = [], [], [], []
+    offsets, lengths, records, previews, deltas = [], [], [], [], []
     blob = bytearray()
     bases = {}
     for name, paths in groups:
         bases[name] = len(offsets)
+        previous = None
         for i, path in enumerate(paths):
             image = screen(path)
             indexed = image.quantize(palette=palette, dither=Image.Dither.NONE)
             raw = indexed.tobytes()
             compressed = zlib.compress(raw, level=9)
             assert zlib.decompress(compressed) == raw
+            use_delta = False
+            # Exact XOR deltas with a keyframe every 12 frames bound seek work.
+            if previous is not None and i % 12:
+                import numpy as np
+                difference=np.bitwise_xor(np.frombuffer(raw,dtype=np.uint8),
+                    np.frombuffer(previous,dtype=np.uint8)).tobytes()
+                packed=zlib.compress(difference,level=9)
+                if len(packed)<len(compressed):
+                    restored=np.bitwise_xor(np.frombuffer(zlib.decompress(packed),dtype=np.uint8),
+                        np.frombuffer(previous,dtype=np.uint8)).tobytes()
+                    assert restored==raw
+                    compressed=packed; use_delta=True
+            deltas.append(int(use_delta))
+            previous=raw
             offsets.append(len(blob)); lengths.append(len(compressed))
             blob.extend(compressed)
             records.append({"id": len(offsets)-1, "source": path.relative_to(ROOT).as_posix()})
-            if (name in ("Vertical", "Horizontal") and i in (0,42,72,126,156,198,222)) or name == "Stills":
+            if (name in ("Vertical", "Horizontal") and i in (0,42,72,126,156,198,222)) or name == "Stills" or (name=="Emotions" and i in (40,88,112,152,192,232)):
                 previews.append((f"{name} {i}", indexed.convert("RGB")))
         print(f"{name}: {len(paths)} frames", flush=True)
     if len(blob) > 11_900_000:
@@ -87,6 +103,7 @@ def main():
     for name, base in bases.items():
         header.append(f"constexpr uint16_t PORTRAIT_{name.upper()}={base};")
     header.append('constexpr uint16_t PORTRAIT_SPEECH_COUNT=180;')
+    header.append('constexpr uint8_t PORTRAIT_DELTA[] = {' + ','.join(map(str,deltas)) + '};')
     header += ["constexpr uint16_t PORTRAIT_PALETTE[] = {" + ",".join(f"0x{x:04x}" for x in colors) + "};",
                "constexpr uint32_t PORTRAIT_OFFSETS[] = {" + ",".join(map(str, offsets)) + "};",
                "constexpr uint32_t PORTRAIT_LENGTHS[] = {" + ",".join(map(str, lengths)) + "};"]

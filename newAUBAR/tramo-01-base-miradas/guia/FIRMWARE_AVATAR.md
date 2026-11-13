@@ -18,8 +18,10 @@ usa el descompresor de su ROM y buffers en RAM/PSRAM. Los fundidos entre recurso
 independientes duran 220 ms. Dentro de los videos se siguen los cuadros a 24 fps;
 si el procesamiento tarda más que un intervalo, se avanza según el tiempo real.
 
-El banco `portrait_assets.dat` ocupa 11.187.880 bytes y contiene 666 cuadros, incluyendo
-180 del [tramo de habla](../../tramo-04-hablar/guia/HABLA.md).
+El banco `portrait_assets.dat` ocupa 7.602.385 bytes y contiene 906 cuadros, incluyendo
+180 del [tramo de habla](../../tramo-04-hablar/guia/HABLA.md) y 240 del
+[tramo de emociones](../../tramo-02-emociones/guia/INTEGRACION.md).
+Usa diferencias XOR sin pérdida y cuadros completos al menos cada 12 cuadros.
 `portrait_assets.S` lo incorpora al firmware sin generar millones de literales
 C++. `portrait_asset_path.h` contiene la ruta local del banco; ejecutar el
 generador si se mueve el proyecto.

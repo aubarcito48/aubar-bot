@@ -1,5 +1,10 @@
 # Próximas imágenes y videos de Aubar
 
+**Actualización:** el video del tramo 02 ya está integrado: sospecha, confusión,
+enojo, tristeza, miedo y timidez tienen sus propios cuadros. Ver
+[rutas, preparación y prueba](INTEGRACION.md). El plan que sigue documenta
+la situación anterior a esa integración.
+
 Revisión: 13 de noviembre de 2026. Referencias: `portrait_routes.h`, catálogo del panel y hoja `../../tramo-01-base-miradas/frames-preparados/firmware/lcd-172x320.jpg`.
 
 ## Qué tenemos

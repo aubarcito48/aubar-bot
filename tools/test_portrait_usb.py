@@ -28,11 +28,17 @@ def hashes():
     def array(name):
         return list(map(int,re.search(name+r'\[\] = \{([^}]+)',header)[1].split(',')))
     offsets,lengths=array('PORTRAIT_OFFSETS'),array('PORTRAIT_LENGTHS')
+    deltas=array('PORTRAIT_DELTA')
     blob=(ROOT/'firmware/KirbyPantalla/portrait_assets.dat').read_bytes()
     result=[]
-    for offset,length in zip(offsets,lengths):
+    previous=None
+    for offset,length,delta in zip(offsets,lengths,deltas):
         raw=zlib.decompress(blob[offset:offset+length])
+        if delta:
+            assert previous is not None
+            raw=bytes(a^b for a,b in zip(raw,previous))
         assert len(raw)==172*320
+        previous=raw
         value=2166136261
         for pixel in raw: value=((value^pixel)*16777619)&0xffffffff
         result.append(value)
@@ -91,6 +97,13 @@ def main():
         assert after['frame']>before['frame'],(before,after)
         assert after['checksum']==expected[after['frame']],after
         assert session.status().expression=='neutral'
+        # Cross delta keyframes and the forward-to-backward speech turnaround.
+        for _ in range(12):
+            assert session.set_speaking(True)
+            time.sleep(.7)
+            sample=diagnostics(session)
+            assert 486<=sample['frame']<666,sample
+            assert sample['checksum']==expected[sample['frame']],sample
         assert session.set_speaking(False)
         time.sleep(.4)
         assert diagnostics(session)['frame']==480
@@ -99,6 +112,16 @@ def main():
         time.sleep(4.3)
         assert diagnostics(session)['frame']==480
         print('Speech playback, heartbeat, stop, preserved pose and lease expiry PASS.',flush=True)
+        header=(ROOT/'firmware/KirbyPantalla/portrait_assets.h').read_text()
+        base=int(re.search(r'PORTRAIT_EMOTIONS=(\d+)',header)[1])
+        for animation,frame in [('suspicious',40),('confused',88),('angry',112),
+                                ('sad',160),('scared',192),('shy',222)]:
+            apply('ANIMATION',animation)
+            time.sleep(1.5)
+            data=diagnostics(session)
+            assert data['frame']==base+frame,(animation,data)
+            assert data['checksum']==expected[data['frame']],(animation,data)
+            print(animation,data,flush=True)
         apply('MODE','auto')
         print(f'Portrait USB PASS: {len(expected)} desktop decodes, stills, gazes, videos, speech, checksums, PSRAM, live frame rate. Auto restored.')
     finally:

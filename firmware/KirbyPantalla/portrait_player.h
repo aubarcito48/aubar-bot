@@ -6,7 +6,7 @@
 #include "portrait_routes.h"
 #include "portrait_diagnostics.h"
 
-// Random-access zlib frames in flash; indexed image and crossfade buffers in RAM.
+// Bounded-seek keyframe/XOR zlib frames; indexed and crossfade buffers in RAM.
 class PortraitPlayer {
  public:
   PortraitDiagnostics diagnostics;
@@ -15,10 +15,11 @@ class PortraitPlayer {
     pixels_=static_cast<uint16_t*>(allocate(PORTRAIT_PIXELS*2,true));
     previous_=static_cast<uint16_t*>(allocate(PORTRAIT_PIXELS*2));
     indices_=static_cast<uint8_t*>(allocate(PORTRAIT_PIXELS));
+    delta_=static_cast<uint8_t*>(allocate(PORTRAIT_PIXELS));
     // ROM's convenience helper puts this large state on the stack. Keep it
     // on the heap to avoid overflowing the Arduino loop task during decode.
     inflater_=static_cast<tinfl_decompressor*>(allocate(sizeof(tinfl_decompressor)));
-    diagnostics.ready=pixels_ && previous_ && indices_ && inflater_;
+    diagnostics.ready=pixels_ && previous_ && indices_ && delta_ && inflater_;
     if(!diagnostics.ready) return false;
     for(uint32_t i=0;i<PORTRAIT_PIXELS;++i) pixels_[i]=swap(PORTRAIT_BACKGROUND);
     return true;
@@ -45,12 +46,8 @@ class PortraitPlayer {
     if(hasDrawn_ && frame==diagnostics.frame && blend==lastBlend_) return false;
     if(frame>=PORTRAIT_FRAME_COUNT) { ++diagnostics.errors; return false; }
     if(!hasDrawn_ || frame!=diagnostics.frame) {
-      tinfl_init(inflater_);
-      size_t input=PORTRAIT_LENGTHS[frame],output=PORTRAIT_PIXELS;
-      const auto result=tinfl_decompress(inflater_,
-        aubarPortraitData+PORTRAIT_OFFSETS[frame],&input,indices_,indices_,&output,
-        TINFL_FLAG_PARSE_ZLIB_HEADER|TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
-      if(result!=TINFL_STATUS_DONE || output!=PORTRAIT_PIXELS) {
+      if(!decode(frame)) {
+        decoded_=0xffff;
         ++diagnostics.errors; return false;
       }
       uint32_t hash=2166136261u;
@@ -73,6 +70,33 @@ class PortraitPlayer {
     return true;
   }
  private:
+  bool unpack(uint16_t frame,bool difference) {
+    uint8_t* target=difference?delta_:indices_;
+    tinfl_init(inflater_);
+    size_t input=PORTRAIT_LENGTHS[frame],output=PORTRAIT_PIXELS;
+    const auto result=tinfl_decompress(inflater_,aubarPortraitData+PORTRAIT_OFFSETS[frame],
+      &input,target,target,&output,TINFL_FLAG_PARSE_ZLIB_HEADER|TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+    if(result!=TINFL_STATUS_DONE || output!=PORTRAIT_PIXELS) return false;
+    if(difference) for(uint32_t i=0;i<PORTRAIT_PIXELS;++i) indices_[i]^=delta_[i];
+    return true;
+  }
+  bool decode(uint16_t frame) {
+    if(frame==decoded_) return true;
+    // XOR is reversible: the speech ping-pong can step back without seeking.
+    if(decoded_!=0xffff && frame+1==decoded_ && PORTRAIT_DELTA[decoded_]) {
+      if(!unpack(decoded_,true)) return false;
+      decoded_=frame; return true;
+    }
+    uint16_t key=frame;
+    while(PORTRAIT_DELTA[key]) --key;
+    uint16_t next=key;
+    if(decoded_!=0xffff && decoded_>=key && decoded_<frame) next=decoded_+1;
+    for(uint16_t i=next;i<=frame;++i) {
+      if(!unpack(i,PORTRAIT_DELTA[i])) return false;
+      decoded_=i;
+    }
+    return true;
+  }
   static uint16_t speechFrame(uint32_t elapsed) {
     // Keep natural source motion. Never restart per syllable or per heartbeat.
     // Ping-pong avoids a discontinuous last-to-first cut in this supplied clip.
@@ -88,9 +112,9 @@ class PortraitPlayer {
     return p;
   }
   uint16_t *pixels_=nullptr,*previous_=nullptr;
-  uint8_t* indices_=nullptr;
+  uint8_t *indices_=nullptr,*delta_=nullptr;
   tinfl_decompressor* inflater_=nullptr;
   uint32_t selection_=0xffffffffu,startedAt_=0,lastDrawAt_=0;
-  uint16_t lastBlend_=0;
+  uint16_t lastBlend_=0,decoded_=0xffff;
   bool hasDrawn_=false,fade_=false;
 };

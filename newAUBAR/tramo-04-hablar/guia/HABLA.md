@@ -36,9 +36,9 @@ Compilar con `--clean` después de regenerar `portrait_assets.dat`: Arduino
 puede reutilizar el objeto de ensamblador que contiene el banco anterior.
 Consultar los demás argumentos en el README principal.
 
-Banco actual: 666 cuadros y 11.187.880 bytes. Firmware compilado: 11.531.561
-bytes dentro de la partición de 12 MiB. Los próximos tramos necesitarán una
-selección y optimización adicional de recursos antes de agregarse a la placa.
+El primer firmware de habla tenía 666 cuadros y 11.187.880 bytes en su banco.
+La integración del tramo 02 incorpora compresión entre cuadros sin pérdida;
+consultar el tamaño vigente en la guía principal del firmware.
 
 La máscara reutiliza el encuadre vertical aprobado. Verificar cabello, manos
 y computadora en `../frames-preparados/hablar/revision-sin-fondo.jpg`.
