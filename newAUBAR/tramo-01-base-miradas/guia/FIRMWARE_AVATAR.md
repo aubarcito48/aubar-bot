@@ -18,7 +18,8 @@ usa el descompresor de su ROM y buffers en RAM/PSRAM. Los fundidos entre recurso
 independientes duran 220 ms. Dentro de los videos se siguen los cuadros a 24 fps;
 si el procesamiento tarda más que un intervalo, se avanza según el tiempo real.
 
-El banco `portrait_assets.dat` ocupa 7.476.819 bytes y contiene 486 cuadros.
+El banco `portrait_assets.dat` ocupa 11.187.880 bytes y contiene 666 cuadros, incluyendo
+180 del [tramo de habla](../../tramo-04-hablar/guia/HABLA.md).
 `portrait_assets.S` lo incorpora al firmware sin generar millones de literales
 C++. `portrait_asset_path.h` contiene la ruta local del banco; ejecutar el
 generador si se mueve el proyecto.
@@ -84,7 +85,7 @@ python tools/generate_portrait_firmware.py
 Compilar secuencialmente con Arduino CLI y el core ESP32 3.3.8:
 
 ```powershell
-arduino-cli compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --build-path build/portrait --output-dir build/portrait-output firmware/KirbyPantalla
+arduino-cli compile --clean --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --build-path build/portrait --output-dir build/portrait-output firmware/KirbyPantalla
 arduino-cli upload --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --port COM3 --input-dir build/portrait-output firmware/KirbyPantalla
 ```
 

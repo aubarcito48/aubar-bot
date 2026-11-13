@@ -12,6 +12,8 @@ class AvatarController {
   constexpr uint32_t poseVersion() const { return poseVersion_; }
   constexpr uint32_t transitionMs() const { return transitionMs_; }
   constexpr bool hasLookOverride() const { return lookOverride_; }
+  // A renewable lease prevents a frozen talking face after USB/app failure.
+  constexpr bool speaking(uint32_t now) const { return speaking_ && now-speechAt_<4000; }
   constexpr float openness() const { return openness_; }
   constexpr AvatarExpression pose() const {
     AvatarExpression result=avatar_.expression();
@@ -51,6 +53,8 @@ class AvatarController {
   }
   constexpr void apply(const UsbCommand& command,uint32_t now) {
     switch(command.type) {
+      case UsbCommandType::Speech:
+        speaking_=command.speaking; speechAt_=now; break;
       case UsbCommandType::Ping: case UsbCommandType::Status: case UsbCommandType::Portrait: break;
       case UsbCommandType::Animation:
         if (command.animation>=AvatarAnimationId::Count) break;
@@ -96,5 +100,7 @@ class AvatarController {
   UsbMode mode_=UsbMode::Auto;
   float manualGaze_=0,openness_=1;
   bool lookOverride_=false;
+  bool speaking_=false;
+  uint32_t speechAt_=0;
   uint32_t introAt_=0,poseVersion_=0,transitionMs_=450;
 };

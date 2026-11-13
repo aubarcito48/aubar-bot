@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+from tempfile import TemporaryDirectory
 from threading import Event, Lock
 
 
@@ -181,6 +183,33 @@ class SapiBackend(ProcessSpeechBackend):
 
 class KokoroBackend(ProcessSpeechBackend):
     VOICE_LANGUAGES=('es','en')
+    _playback_state = None
+
+    @property
+    def playing(self):
+        path = self._playback_state
+        if path is None:
+            return False
+        try:
+            state = json.loads(path.read_text(encoding='utf-8'))
+            return state['start'] <= time.monotonic() < state['end']
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+
+    def _request(self, payload, *args, **kwargs):
+        if payload.get('action') != 'speak':
+            return super()._request(payload, *args, **kwargs)
+        # The worker only announces playback after synthesis has finished.
+        # A tiny local marker keeps subprocess stdout a single JSON response.
+        with TemporaryDirectory(prefix='aubar-speech-') as directory:
+            path = Path(directory) / 'playback.json'
+            path.write_text('{}', encoding='utf-8')
+            self._playback_state = path
+            try:
+                return super()._request({**payload, 'playback_state': str(path)}, *args, **kwargs)
+            finally:
+                self._playback_state = None
+
     def _command(self):
         # pythonw has no console streams; a hidden python.exe supplies JSON pipes.
         executable=Path(sys.executable)
@@ -205,6 +234,14 @@ class SpeechEngine:
     def busy(self):
         with self._lock:
             return self._future is not None and not self._future.done()
+
+    @property
+    def playing(self):
+        with self._lock:
+            active = (not self._closed and self._cancel is not None
+                      and not self._cancel.is_set() and self._future is not None
+                      and not self._future.done())
+        return active and bool(getattr(self.backend, 'playing', False))
 
     def _submit(self, operation):
         with self._lock:

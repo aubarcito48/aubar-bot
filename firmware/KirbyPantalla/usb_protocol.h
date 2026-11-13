@@ -3,7 +3,7 @@
 #include <string.h>
 #include "animation_data.h"
 
-enum class UsbCommandType { Ping, Status, Expression, Look, Mode, Animation, Portrait };
+enum class UsbCommandType { Ping, Status, Expression, Look, Mode, Animation, Portrait, Speech };
 enum class UsbLook { Left, Center, Right };
 enum class UsbMode { Manual, Auto };
 enum class UsbParseResult { Incomplete, Valid, Empty, UnknownCommand, InvalidArgument,
@@ -16,6 +16,7 @@ struct UsbCommand {
   UsbMode mode = UsbMode::Auto;
   AvatarAnimationId animation = AvatarAnimationId::None;
   bool hasLook = false;
+  bool speaking = false;
 };
 
 class UsbProtocol {
@@ -68,6 +69,11 @@ class UsbProtocol {
     } else if (strcmp(buffer_, "PORTRAIT") == 0) {
       if (argument) return UsbParseResult::InvalidArgument;
       parsed.type = UsbCommandType::Portrait;
+    } else if (strcmp(buffer_, "SPEECH") == 0) {
+      parsed.type = UsbCommandType::Speech;
+      if (!argument) return UsbParseResult::InvalidArgument;
+      if (strcmp(argument,"on")==0) parsed.speaking=true;
+      else if (strcmp(argument,"off")!=0) return UsbParseResult::InvalidArgument;
     } else if (strcmp(buffer_, "STATUS") == 0) {
       if (argument) return UsbParseResult::InvalidArgument;
       parsed.type = UsbCommandType::Status;

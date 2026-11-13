@@ -27,8 +27,9 @@ class PortraitPlayer {
   bool render(uint32_t now,const AvatarController& controller) {
     if(!diagnostics.ready || (hasDrawn_ && now-lastDrawAt_<41)) return false;
     const auto scene=portraitScene(controller);
+    const bool speaking=controller.speaking(now);
     // A logical eye-step change must not restart the same portrait animation.
-    const uint32_t selection=(static_cast<uint32_t>(scene)<<16) |
+    const uint32_t selection=speaking ? 0xfffffffeu : (static_cast<uint32_t>(scene)<<16) |
       (controller.animation()==AvatarAnimationId::None ?
         static_cast<uint8_t>(controller.avatar().expressionId()) :
         256+static_cast<uint8_t>(controller.animation())) |
@@ -37,7 +38,8 @@ class PortraitPlayer {
       memcpy(previous_,pixels_,PORTRAIT_PIXELS*2);
       startedAt_=now; selection_=selection; fade_=hasDrawn_; lastBlend_=0;
     }
-    const uint16_t frame=portraitFrame(scene,now-startedAt_);
+    const uint16_t frame=speaking ? PORTRAIT_SPEECH+speechFrame(now-startedAt_) :
+      portraitFrame(scene,now-startedAt_);
     const uint32_t elapsed=now-startedAt_;
     const uint16_t blend=!fade_ || elapsed>=220 ? 256 : elapsed*256/220;
     if(hasDrawn_ && frame==diagnostics.frame && blend==lastBlend_) return false;
@@ -71,6 +73,14 @@ class PortraitPlayer {
     return true;
   }
  private:
+  static uint16_t speechFrame(uint32_t elapsed) {
+    // Keep natural source motion. Never restart per syllable or per heartbeat.
+    // Ping-pong avoids a discontinuous last-to-first cut in this supplied clip.
+    constexpr uint16_t first=0,last=PORTRAIT_SPEECH_COUNT-1,span=last-first;
+    const uint32_t tick=elapsed*24/1000;
+    const uint16_t p=tick%(span*2);
+    return first+(p<=span?p:span*2-p);
+  }
   static uint16_t swap(uint16_t c) { return (c>>8)|(c<<8); }
   static void* allocate(size_t size,bool internalFirst=false) {
     void* p=heap_caps_malloc(size,(internalFirst?MALLOC_CAP_INTERNAL:MALLOC_CAP_SPIRAM)|MALLOC_CAP_8BIT);

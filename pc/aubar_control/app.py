@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, CancelledError
 import logging
+import time
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Event
@@ -88,6 +89,8 @@ class AubarApp:
         self.speech_message = tk.StringVar(value="Lista para probar la voz de Onyx.")
         self.speech_voice = tk.StringVar(value=f"Voz: {KOKORO_VOICE['name']} ({KOKORO_VOICE['language']})")
         self._speech_future = None
+        self._speech_avatar_sent = False
+        self._speech_avatar_at = 0.0
         self._speech_stop_requested = False
         self._speech_is_test = False
         self.reply_provider = reply_provider
@@ -1306,6 +1309,8 @@ class AubarApp:
 
     def _release_device(self,neutralize):
         try:
+            if getattr(self.session,'connected',False) and getattr(self.session,'speech_supported',False):
+                self.session.set_speaking(False)
             if neutralize:
                 action,_=safe_avatar_action('EXPRESSION','neutral')
                 self.session.apply_action(action)
@@ -1313,6 +1318,8 @@ class AubarApp:
             self.session.close()
 
     def _invalidate_connection(self):
+        self._speech_avatar_sent = False
+        self._speech_avatar_at = 0.0
         self.connection_token += 1
         had_query=self._ai_future is not None
         self._invalidate_ai_turn(restore_visual=False)
@@ -1366,6 +1373,18 @@ class AubarApp:
         self.animation_value.set("Animación: "+ANIMATIONS.get(status.animation, "Ninguna"))
         self.values["mode"].set("Automático" if status.mode == "auto" else "Manual")
         self.values["look"].set(status.look.capitalize())
+
+    def _dispatch_speech_avatar(self):
+        if not self.connected or self.busy or not hasattr(self.session,'set_speaking'):
+            return
+        if getattr(self.session,'speech_supported',None) is False:
+            return
+        playing = bool(getattr(self.speech,'playing',False))
+        now = time.monotonic()
+        if playing != self._speech_avatar_sent or playing and now-self._speech_avatar_at>=0.7:
+            self._speech_avatar_sent = playing
+            self._speech_avatar_at = now
+            self._submit('speech_avatar', lambda: self.session.set_speaking(playing))
 
     def _drain(self):
         try:
@@ -1451,6 +1470,7 @@ class AubarApp:
         self._tick_automatic()
         self._dispatch_voice()
         self._dispatch_ai_avatar()
+        self._dispatch_speech_avatar()
         self._ai_controls()
         if not self.closed:
             self._events_timer = self.root.after(80, self._drain)

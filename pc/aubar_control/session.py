@@ -31,6 +31,7 @@ class DeviceSession:
         self._serial = None
         self.port: str | None = None
         self.version: int | None = None
+        self.speech_supported = None
 
     @property
     def connected(self) -> bool:
@@ -40,6 +41,7 @@ class DeviceSession:
         connection, self._serial = self._serial, None
         self.port = None
         self.version = None
+        self.speech_supported = None
         if connection is not None:
             try:
                 connection.close()
@@ -103,6 +105,23 @@ class DeviceSession:
         except (serial.SerialException, OSError) as exc:
             self.close()
             raise DeviceError("Se perdió la conexión USB. Revisá el cable y volvé a conectar.") from exc
+
+    def set_speaking(self, speaking: bool) -> bool:
+        """Optional v4 extension; old firmware safely declines the feature."""
+        if not self.connected:
+            raise DeviceError('Primero conectá el dispositivo.')
+        if self.speech_supported is False:
+            return False
+        message = 'SPEECH ' + ('on' if speaking else 'off')
+        self._serial.write((message+'\n').encode('ascii'))
+        reply = self._readline(time.monotonic()+self._timeout)
+        if reply == 'ERR UNKNOWN_COMMAND':
+            self.speech_supported = False
+            return False
+        if reply != 'OK APPLIED '+message:
+            raise DeviceError('El ESP32 no confirmó la animación de habla.')
+        self.speech_supported = True
+        return True
 
     def apply_action(self, action) -> DeviceStatus:
         message = encode_action(action)

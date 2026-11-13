@@ -65,6 +65,12 @@ El chat responde por defecto con voseo argentino, o en inglés si se lo pedís.
 Esto aproxima la forma de hablar; no es una voz entrenada con acento cordobés
 ni ofrece control emocional. Para cargar el cambio, cerrar y volver a abrir el panel.
 
+Con el firmware de habla, el retrato mueve la boca durante la reproducción de
+Onyx: funciona en la prueba de voz, las respuestas del micrófono y el chat leído.
+La secuencia continúa entre palabras y vuelve a la expresión anterior al terminar
+o detener el audio. Es animación acompañando la voz, sin sincronización exacta
+de cada fonema. [Preparación y prueba del habla](newAUBAR/tramo-04-hablar/guia/HABLA.md).
+
 | Acción | Ejemplo de voz |
 | --- | --- |
 | Abrir YouTube | «abrí YouTube» |
@@ -355,7 +361,7 @@ esté usando su puerto:
 
 ```powershell
 & $aubarCli @aubarCliArgs board list
-& $aubarCli @aubarCliArgs compile --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --build-path build/portrait --output-dir build/portrait-output firmware/KirbyPantalla
+& $aubarCli @aubarCliArgs compile --clean --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi" --jobs 1 --build-property upload.maximum_size=12582912 --build-path build/portrait --output-dir build/portrait-output firmware/KirbyPantalla
 ```
 
 La configuración usada es:
@@ -409,7 +415,7 @@ firmware/KirbyPantalla/
   Display_ST7789.h        Pines y configuración de la pantalla
   portrait_player.h      Descompresión y transiciones del retrato
   portrait_routes.h      Correspondencias entre comandos y poses
-  portrait_assets.dat    Banco comprimido de 486 cuadros
+  portrait_assets.dat    Banco comprimido de 666 cuadros
   partitions.csv         Aplicación de 12 MiB en flash de 16 MB
   avatar_data.h          Catálogo lógico original para el protocolo USB
 newAUBAR/                Recursos, preparación y documentación del retrato

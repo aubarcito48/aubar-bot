@@ -1,0 +1,91 @@
+{
+  "source": "videos/botbar-hablando.mp4",
+  "fps": 24,
+  "frameCount": 240,
+  "size": [
+    180,
+    320
+  ],
+  "matte": {
+    "darkThreshold": 172,
+    "chroma": 50,
+    "deskY": 278,
+    "subjectRegion": [
+      [
+        33,
+        27
+      ],
+      [
+        153,
+        27
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        148,
+        174
+      ],
+      [
+        157,
+        211
+      ],
+      [
+        160,
+        250
+      ],
+      [
+        152,
+        275
+      ],
+      [
+        0,
+        275
+      ],
+      [
+        0,
+        229
+      ],
+      [
+        13,
+        182
+      ],
+      [
+        33,
+        166
+      ],
+      [
+        52,
+        155
+      ]
+    ],
+    "laptop": [
+      [
+        152,
+        211
+      ],
+      [
+        180,
+        209
+      ],
+      [
+        180,
+        290
+      ],
+      [
+        117,
+        300
+      ],
+      [
+        67,
+        280
+      ],
+      [
+        147,
+        264
+      ]
+    ]
+  },
+  "note": "Continuous native frames; audio playback controls the firmware speech overlay."
+}

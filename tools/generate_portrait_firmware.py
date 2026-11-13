@@ -44,6 +44,7 @@ def main():
         ("Horizontal", [SOURCE / "frames-preparados/horizontal/sin-fondo" / f"{i:03d}.webp" for i in range(240)]),
         ("Stills", [SOURCE / "animaciones-sin-fondo/formato webp" / f"{n}-Photoroom.webp"
                     for n in ["frente", "mira-pc", "pensando", "dormido", "boca-semi-abierta", "boca-abierta"]]),
+        ("Speech", [ROOT / "newAUBAR/tramo-04-hablar/frames-preparados/hablar/sin-fondo" / f"{i:03d}.webp" for i in range(36,216)]),
     ]
     # A single palette prevents independent quantizers from changing skin colors
     # between adjacent frames. No dithering: avoid temporal speckles at LCD size.
@@ -85,6 +86,7 @@ def main():
               'extern "C" const uint8_t aubarPortraitData[];']
     for name, base in bases.items():
         header.append(f"constexpr uint16_t PORTRAIT_{name.upper()}={base};")
+    header.append('constexpr uint16_t PORTRAIT_SPEECH_COUNT=180;')
     header += ["constexpr uint16_t PORTRAIT_PALETTE[] = {" + ",".join(f"0x{x:04x}" for x in colors) + "};",
                "constexpr uint32_t PORTRAIT_OFFSETS[] = {" + ",".join(map(str, offsets)) + "};",
                "constexpr uint32_t PORTRAIT_LENGTHS[] = {" + ",".join(map(str, lengths)) + "};"]

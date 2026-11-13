@@ -62,6 +62,8 @@ class UsbControl {
     else {
       const auto& cmd = command();
       switch (cmd.type) {
+        case UsbCommandType::Speech:
+          snprintf(response_,sizeof(response_),"OK APPLIED SPEECH %s\n",cmd.speaking?"on":"off"); break;
         case UsbCommandType::Ping:
           snprintf(response_, sizeof(response_), "OK PONG 4\n"); break;
         case UsbCommandType::Portrait:

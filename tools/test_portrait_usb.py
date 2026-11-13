@@ -79,8 +79,28 @@ def main():
         data=diagnostics(session)
         assert 240<=data['frame']<480 and data['checksum']==expected[data['frame']],data
         print('horizontal live motion',data,flush=True)
+        apply('EXPRESSION','neutral')
+        assert session.set_speaking(True)
+        time.sleep(.5)
+        before=diagnostics(session)
+        assert 486<=before['frame']<666,before
+        # Renewing playback must not reset the clip or logical pose.
+        assert session.set_speaking(True)
+        time.sleep(.5)
+        after=diagnostics(session)
+        assert after['frame']>before['frame'],(before,after)
+        assert after['checksum']==expected[after['frame']],after
+        assert session.status().expression=='neutral'
+        assert session.set_speaking(False)
+        time.sleep(.4)
+        assert diagnostics(session)['frame']==480
+        assert session.set_speaking(True)
+        # Simulate a crashed/unplugged desktop: speech expires by itself.
+        time.sleep(4.3)
+        assert diagnostics(session)['frame']==480
+        print('Speech playback, heartbeat, stop, preserved pose and lease expiry PASS.',flush=True)
         apply('MODE','auto')
-        print('Portrait USB PASS: 486 desktop decodes, 6 device stills, 3 gazes, both videos, checksums, PSRAM, live frame rate. Auto restored.')
+        print(f'Portrait USB PASS: {len(expected)} desktop decodes, stills, gazes, videos, speech, checksums, PSRAM, live frame rate. Auto restored.')
     finally:
         session.close()
 

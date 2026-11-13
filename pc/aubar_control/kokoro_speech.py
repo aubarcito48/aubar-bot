@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 import json
 from pathlib import Path
 import sys
+import time
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from pc.aubar_control.tts_assets import ASSETS, MODEL_DIR, VOICE
@@ -38,9 +39,16 @@ def execute(request):
             speed=speech_speed(rate),lang=pronunciation_language(text))
         try:
             sd.play(samples*(volume/100),sample_rate)
+            marker = request.get('playback_state')
+            if marker:
+                started = time.monotonic()
+                Path(marker).write_text(json.dumps({'start': started,
+                    'end': started + len(samples)/sample_rate}), encoding='utf-8')
             sd.wait()
         finally:
             sd.stop()
+            if request.get('playback_state'):
+                Path(request['playback_state']).write_text('{}', encoding='utf-8')
     return {'ok':True,'voice':VOICE}
 
 
