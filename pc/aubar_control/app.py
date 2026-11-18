@@ -11,7 +11,8 @@ from tkinter import ttk
 from .protocol import DeviceError
 from .session import DeviceSession, available_ports
 from .audio import AudioError, MicrophoneCapture, available_inputs
-from .recognition import LocalRecognizer, RecognitionError
+from .recognition import RecognitionError
+from .whisper_recognition import WhisperRecognizer
 from .catalog import EXPRESSIONS, ANIMATIONS
 from .voice_commands import VoiceAction
 from .automatic_audio import AutomaticCapture
@@ -123,8 +124,8 @@ class AubarApp:
         self.audio_failed = False
         self.inputs = {}
         self.last_recording = None
-        self.recognizer = recognizer or LocalRecognizer()
-        self.recognition_ready=not isinstance(self.recognizer,LocalRecognizer) or self.recognizer.backend is not None
+        self.recognizer = recognizer if recognizer is not None else WhisperRecognizer()
+        self.recognition_ready=not isinstance(self.recognizer,WhisperRecognizer) or self.recognizer.backend is not None
         self.recognized_action = None
         self.recognized_query = None
         self.recognition_text = tk.StringVar(value="Todavía no hay una frase reconocida.")
@@ -152,7 +153,7 @@ class AubarApp:
         self.refresh_ports()
         self.refresh_microphones()
         if not self.recognition_ready:
-            self.recognition_message.set('Preparando el reconocimiento de español. Esperá a que termine para hablar.')
+            self.recognition_message.set('Preparando '+self.recognizer.label+'. Esperá a que termine para hablar.')
             self._audio_submit('recognizer_ready',self.recognizer.prepare)
 
     def _build(self):
@@ -983,6 +984,8 @@ class AubarApp:
         self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · comandos y preguntas directos",
             variable=self.auto_enabled, command=self.toggle_automatic)
         self.auto_check.pack(anchor="w")
+        ttk.Label(modes,text='Motor: '+getattr(self.recognizer,'label',type(self.recognizer).__name__),
+            style='Muted.TLabel').pack(anchor='w',pady=(4,0))
         ttk.Label(modes, text="Decí el comando o la pregunta directamente. En manual, mantené pulsado el botón.",
                   style="Muted.TLabel", wraplength=650).pack(anchor="w", pady=(6, 0))
         self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",

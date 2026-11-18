@@ -7,7 +7,7 @@ from pc.aubar_control.catalog import EXPRESSIONS, ANIMATIONS
 from pc.aubar_control.voice_commands import VoiceAction, match_command
 from pc.aubar_control.protocol import DeviceError, encode_action
 from pc.aubar_control.session import DeviceSession
-from pc.aubar_control.recognition import LocalRecognizer
+from pc.aubar_control.whisper_recognition import WhisperRecognizer
 from pc.aubar_control.audio import Recording
 from array import array
 
@@ -81,7 +81,7 @@ class CombinationTests(unittest.TestCase):
         for text,expected in (('aubar enojado derecha','derecha'),('aubar celebrar izquierda','izquierda'),
                               ('enojado derecha','derecha'),('celebrar izquierda','izquierda'),
                               ('aubar enojado derecha izquierda',None)):
-            engine=LocalRecognizer(backend=FakeBackend(result(text)))
+            engine=WhisperRecognizer(backend=FakeBackend(result(text)))
             action=engine.recognize_automatic(recording).action
             self.assertEqual(action.look if action else None,expected)
 

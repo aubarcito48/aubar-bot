@@ -6,10 +6,11 @@ import unittest
 
 from audio_fakes import FakeAudio
 import test_app
-from test_recognition import FakeBackend, FakeDecoder, result
+from test_recognition import FakeBackend, result
 from pc.aubar_control.audio import AudioError, Recording
 from pc.aubar_control.automatic_audio import AutomaticCapture, SpeechSegmenter
-from pc.aubar_control.recognition import LocalRecognizer, RecognitionResult
+from pc.aubar_control.recognition import RecognitionResult
+from pc.aubar_control.whisper_recognition import WhisperRecognizer
 from pc.aubar_control.voice_commands import match_command
 
 
@@ -82,7 +83,7 @@ class SegmentationTests(unittest.TestCase):
 
 class AutomaticRecognitionTests(unittest.TestCase):
     def recognize(self,text,confidence=1):
-        engine=LocalRecognizer(backend=FakeBackend(result(text,confidence)))
+        engine=WhisperRecognizer(backend=FakeBackend(result(text,confidence)))
         return engine.recognize_automatic(Recording(pcm(1,3000),16000))
 
     def test_direct_commands_work_and_queries_or_negations_are_not_usb_commands(self):
@@ -95,40 +96,10 @@ class AutomaticRecognitionTests(unittest.TestCase):
             self.assertEqual(self.recognize(phrase).action.argument,argument)
         self.assertIsNone(self.recognize('aubar contento',.4).action)
 
-    def test_focused_wake_verifies_sound_without_inventing_a_command(self):
-        class WakeBackend(FakeBackend):
-            wake_calls=0
-            def KaldiRecognizer(self, model, rate, grammar=None):
-                if grammar is None:
-                    return super().KaldiRecognizer(model,rate)
-                self.wake_calls+=1
-                return FakeDecoder(FakeBackend(self.wake))
-        full=result('ayudar contento')
-        full['result'][0].update(start=.2,end=.6)
-        full['result'][1].update(start=.61,end=1.2)
-        backend=WakeBackend(full)
-        backend.wake={'text':'au bar','result':[
-            dict(word='au',conf=.99,start=.2,end=.4),
-            dict(word='bar',conf=.99,start=.4,end=.6)]}
-        engine=LocalRecognizer(backend=backend)
-        audio=Recording(pcm(1.5,3000),16000)
-        self.assertEqual(engine.recognize_automatic(audio).action.argument,'contento')
-        backend.wake['result'] += [
-            dict(word='[unk]',conf=.9,start=.6,end=.63),
-            dict(word='[unk]',conf=.9,start=.63,end=.66)]
-        self.assertEqual(engine.recognize_automatic(audio).action.argument,'contento')
-        backend.wake['result'][-1]['end']=.8
-        self.assertIsNone(engine.recognize_automatic(audio).action)
-        backend.wake['result']=backend.wake['result'][:2]
-        backend.wake['result'][1]['conf']=.5
-        self.assertIsNone(engine.recognize_automatic(audio).action)
-        backend.wake['result'][1]['conf']=.99
-        backend.wake['result'].insert(0,dict(word='[unk]',conf=1,start=0,end=.2))
-        self.assertIsNone(engine.recognize_automatic(audio).action)
-        backend.final=result('ayudar hoy hace frio')
-        calls=backend.wake_calls
-        self.assertIsNone(engine.recognize_automatic(audio).action)
-        self.assertEqual(backend.wake_calls,calls)
+    def test_misheard_name_is_preserved_without_inventing_a_command(self):
+        recognized=self.recognize('ayudar contento')
+        self.assertIsNone(recognized.action)
+        self.assertEqual(recognized.query,'ayudar contento')
 
 
 class AutomaticAppTests(unittest.TestCase):

@@ -1,30 +1,11 @@
 from array import array
-import json
+from pathlib import Path
 import unittest
 
 from pc.aubar_control.audio import Recording
-from pc.aubar_control.recognition import LocalRecognizer, RecognitionError
+from pc.aubar_control.recognition import RecognitionError
+from pc.aubar_control.whisper_recognition import WhisperRecognizer
 from pc.aubar_control.voice_commands import match_command
-
-
-class FakeDecoder:
-    def __init__(self, backend):
-        self.backend = backend
-        self.first = True
-
-    def SetWords(self, enabled):
-        pass
-
-    def AcceptWaveform(self, data):
-        complete = self.backend.segment is not None and self.first
-        self.first = False
-        return complete
-
-    def Result(self):
-        return json.dumps(self.backend.segment)
-
-    def FinalResult(self):
-        return json.dumps(self.backend.final)
 
 
 def result(text, confidence=1):
@@ -32,37 +13,25 @@ def result(text, confidence=1):
 
 
 class FakeBackend:
+    """Whisper constructor and model fake with mutable segment evidence."""
     def __init__(self, final, segment=None):
         self.final, self.segment = final, segment
         self.models = 0
         self.rate = None
 
-    def Model(self, path):
+    def __call__(self, path, **kwargs):
         self.models += 1
-        return object()
+        return self
 
-    def KaldiRecognizer(self, model, rate, grammar=None):
-        self.rate = rate
-        return FakeDecoder(self)
+    def transcribe(self, samples, **kwargs):
+        from types import SimpleNamespace as Item
+        self.rate = 16000
+        parts = ([self.segment] if self.segment is not None else []) + [self.final]
+        return iter([Item(text=part['text'], words=[Item(probability=w['conf']) for w in part['result']],
+            avg_logprob=-.1, no_speech_prob=.01, compression_ratio=1) for part in parts]), Item()
 
 
 class VoiceTests(unittest.TestCase):
-    def test_static_model_never_receives_an_unsupported_runtime_grammar(self):
-        class StaticBackend(FakeBackend):
-            def KaldiRecognizer(self,model,rate,grammar=None):
-                if grammar is not None:
-                    raise AssertionError('Static model cannot receive a runtime grammar')
-                return super().KaldiRecognizer(model,rate)
-        decoded=result('ayudar como estas')
-        for index,word in enumerate(decoded['result']):
-            word.update(start=.2+index*.4,end=.6+index*.4)
-        engine=LocalRecognizer(backend=StaticBackend(decoded))
-        engine.supports_grammar=False
-        recording=Recording(array('h',[3000]*32000).tobytes(),16000)
-        self.assertEqual(engine.recognize_automatic(recording).query,'ayudar como estas')
-        engine.backend.final=result('contento')
-        self.assertEqual(engine.recognize_automatic(recording).action.argument,'contento')
-
     def test_spanish_commands_accents_and_politeness(self):
         phrases = {
             '¡Contento!': ('EXPRESSION', 'contento'),
@@ -90,30 +59,30 @@ class VoiceTests(unittest.TestCase):
 
     def test_segments_are_combined_before_matching_and_model_is_cached(self):
         backend = FakeBackend(result('la izquierda'), result('mira a'))
-        engine = LocalRecognizer(backend=backend)
+        engine = WhisperRecognizer(backend=backend)
         audio = Recording(array('h', [2000]*8000).tobytes(), 48000)
         recognized = engine.recognize(audio)
         self.assertEqual(recognized.text, 'mira a la izquierda')
         self.assertEqual(recognized.action.argument, 'izquierda')
         engine.recognize(audio)
         self.assertEqual(backend.models, 1)
-        self.assertEqual(backend.rate, 48000)
+        self.assertEqual(backend.rate, 16000)
 
     def test_low_confidence_keeps_text_but_rejects_action(self):
-        engine = LocalRecognizer(backend=FakeBackend(result('contento', 0.3)))
+        engine = WhisperRecognizer(backend=FakeBackend(result('contento', 0.3)))
         recognized = engine.recognize(Recording(array('h', [2000]*1000).tobytes(), 16000))
         self.assertEqual(recognized.text, 'contento')
         self.assertIsNone(recognized.action)
 
     def test_silence_does_not_load_a_model(self):
         backend = FakeBackend(result('contento'))
-        recognized = LocalRecognizer(backend=backend).recognize(Recording(bytes(32000), 16000))
+        recognized = WhisperRecognizer(backend=backend).recognize(Recording(bytes(32000), 16000))
         self.assertIsNone(recognized.action)
         self.assertEqual(backend.models, 0)
 
     def test_missing_model_is_actionable(self):
-        with self.assertRaisesRegex(RecognitionError, 'modelo'):
-            LocalRecognizer(model_path='missing-test-model').recognize(
+        with self.assertRaisesRegex(RecognitionError, 'Falta Whisper local'):
+            WhisperRecognizer(model_path=Path('missing-test-model')).recognize(
                 Recording(array('h', [2000]*1000).tobytes(), 16000))
 
 

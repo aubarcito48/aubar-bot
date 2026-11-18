@@ -8,7 +8,8 @@ from audio_fakes import FakeAudio, FakeSpeechEngine
 from pc.aubar_control.app import AubarApp
 from pc.aubar_control.audio import MicrophoneCapture, InputDevice
 from pc.aubar_control.config import load_groq_config
-from pc.aubar_control.recognition import LocalRecognizer, RecognitionError
+from pc.aubar_control.recognition import RecognitionError
+from pc.aubar_control.whisper_recognition import WhisperRecognizer
 
 
 class PreparationTests(unittest.TestCase):
@@ -18,7 +19,7 @@ class PreparationTests(unittest.TestCase):
         self.root=tk.Tk();self.root.withdraw()
         self.release=threading.Event();self.started=threading.Event()
         self.error=None;self.audio=FakeAudio()
-        self.recognizer=LocalRecognizer()
+        self.recognizer=WhisperRecognizer()
         def prepare():
             self.started.set();self.release.wait(3)
             if self.error:raise self.error

@@ -5,15 +5,16 @@ from unittest.mock import Mock
 import test_app
 import test_automatic
 from test_automatic import pcm
-from test_recognition import FakeBackend, FakeDecoder, result
+from test_recognition import FakeBackend, result
 from pc.aubar_control.audio import Recording
-from pc.aubar_control.recognition import LocalRecognizer, RecognitionResult
+from pc.aubar_control.recognition import RecognitionResult
+from pc.aubar_control.whisper_recognition import WhisperRecognizer
 from pc.aubar_control.voice_commands import match_command
 
 
 class QueryRecognitionTests(unittest.TestCase):
     def recognize(self,text,confidence=1,automatic=True):
-        recognizer=LocalRecognizer(backend=FakeBackend(result(text,confidence)))
+        recognizer=WhisperRecognizer(backend=FakeBackend(result(text,confidence)))
         recording=Recording(pcm(2,3000),16000)
         return recognizer.recognize_automatic(recording) if automatic else recognizer.recognize(recording)
 
@@ -23,7 +24,7 @@ class QueryRecognitionTests(unittest.TestCase):
                          'me siento contento','no te pongas enojado','contento y celebrar'):
                 with self.subTest(text=text,automatic=automatic):
                     recognized=self.recognize('aubar '+text,automatic=automatic)
-                    self.assertEqual(recognized.query,text)
+                    self.assertEqual(recognized.query,'aubar '+text)
                     self.assertIsNone(recognized.action)
 
     def test_exact_commands_have_priority_and_unclear_commands_do_not_become_queries(self):
@@ -62,74 +63,28 @@ class QueryRecognitionTests(unittest.TestCase):
         recognized=self.recognize('aubar '+'a'*1001)
         self.assertIsNone(recognized.query)
 
-    def test_query_tolerates_one_softer_word_but_not_a_misaligned_transcript(self):
+    def test_query_tolerates_one_softer_word_but_rejects_unreliable_evidence(self):
         decoded=result('aubar como estas',.8)
         decoded['result'][-1]['conf']=.4
         audio=Recording(pcm(2,3000),16000)
-        engine=LocalRecognizer(backend=FakeBackend(decoded))
-        self.assertEqual(engine.recognize_automatic(audio).query,'como estas')
-        decoded['result'].pop()
+        engine=WhisperRecognizer(backend=FakeBackend(decoded))
+        self.assertEqual(engine.recognize_automatic(audio).query,'aubar como estas')
+        decoded['result'][-1]['conf']=.1
         self.assertIsNone(engine.recognize_automatic(audio).query)
-
-    def test_focused_wake_accepts_a_pause_without_swallowing_query_words_or_negation(self):
-        class WakeBackend(FakeBackend):
-            def KaldiRecognizer(self,model,rate,grammar=None):
-                if grammar is None:
-                    return super().KaldiRecognizer(model,rate)
-                return FakeDecoder(FakeBackend(self.wake))
-        decoded=result('ayudar no enojado')
-        for word,start,end in zip(decoded['result'],(.2,.9,1.1),(.6,1.1,1.4)):
-            word.update(start=start,end=end)
-        backend=WakeBackend(decoded)
-        backend.wake={'text':'au bar','result':[
-            dict(word='au',conf=.99,start=.2,end=.4),
-            dict(word='bar',conf=.99,start=.4,end=.6)]}
-        audio=Recording(pcm(2,3000),16000)
-        engine=LocalRecognizer(backend=backend)
-        recognized=engine.recognize_automatic(audio)
-        self.assertEqual(recognized.query,'no enojado')
-        self.assertIsNone(recognized.action)
-        # A weak first query word must not be removed to create a command.
-        decoded['result'][1]['conf']=.1
-        recognized=engine.recognize_automatic(audio)
-        self.assertIsNone(recognized.action)
-        self.assertIsNone(recognized.query)
-        decoded['result'][1]['conf']=1
-        backend.wake['result'][1]['conf']=.4
-        self.assertEqual(engine.recognize_automatic(audio).query,'ayudar no enojado')
 
     def test_unverified_optional_prefix_is_preserved_in_query(self):
         decoded=result('ayudar como estas')
         for index,word in enumerate(decoded['result']):
             word.update(start=.2+index*.4,end=.6+index*.4)
-        self.assertEqual(LocalRecognizer(backend=FakeBackend(decoded)).recognize_automatic(
+        self.assertEqual(WhisperRecognizer(backend=FakeBackend(decoded)).recognize_automatic(
             Recording(pcm(2,3000),16000)).query,'ayudar como estas')
 
-    def test_direct_transcript_does_not_need_optional_name_audio(self):
-        class OmittedNameBackend(FakeBackend):
-            def KaldiRecognizer(self,model,rate,grammar=None):
-                if grammar is None:
-                    return super().KaldiRecognizer(model,rate)
-                return FakeDecoder(FakeBackend(self.wake))
-        audio=Recording(pcm(2,3000),16000)
+    def test_direct_transcript_does_not_need_an_optional_name(self):
         for phrase in ('contento','enojado derecha','como estas'):
-            decoded=result(phrase)
-            for index,word in enumerate(decoded['result']):
-                word.update(start=.8+index*.3,end=1.1+index*.3)
-            backend=OmittedNameBackend(decoded)
-            backend.wake={'text':'au bar','result':[
-                dict(word='au',conf=.99,start=.2,end=.4),
-                dict(word='bar',conf=.99,start=.4,end=.6)]}
-            engine=LocalRecognizer(backend=backend)
-            recognized=engine.recognize_automatic(audio)
+            recognized=self.recognize(phrase)
             action=match_command(phrase)
             self.assertEqual(recognized.action,action)
             self.assertEqual(recognized.query,None if action else phrase)
-            # Removing optional name audio does not disable direct commands.
-            backend.wake={'text':'[unk]','result':[dict(word='[unk]',conf=1,start=.2,end=.6)]}
-            rejected=engine.recognize_automatic(audio)
-            self.assertEqual(rejected.action,action)
-            self.assertEqual(rejected.query,None if action else phrase)
 
 
 class QueryPanelTests(unittest.TestCase):

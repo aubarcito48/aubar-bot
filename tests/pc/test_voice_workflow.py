@@ -11,7 +11,7 @@ from test_playback_gate import Clock, ControlledSpeech
 from pc.aubar_control.app import AubarApp
 from pc.aubar_control.audio import InputDevice, MicrophoneCapture
 from pc.aubar_control.playback_gate import PlaybackGate
-from pc.aubar_control.recognition import LocalRecognizer
+from pc.aubar_control.whisper_recognition import WhisperRecognizer
 from pc.aubar_control.session import DevicePort, DeviceSession
 from pc.aubar_control.config import load_groq_config
 
@@ -58,7 +58,7 @@ class VoiceWorkflowTests(unittest.TestCase):
             port_provider=lambda:[DevicePort('COM3','ESP32 simulado',True)],
             capture=MicrophoneCapture(self.audio),
             audio_provider=lambda:[InputDevice(1,'Entrada simulada','Prueba',True)],
-            recognizer=LocalRecognizer(backend=self.decoder),speech=self.voice,
+            recognizer=WhisperRecognizer(backend=self.decoder),speech=self.voice,
             config_loader=lambda:load_groq_config(None,environ={}))
         self.clock=Clock()
         self.app.playback_gate=PlaybackGate(self.clock)
@@ -105,7 +105,7 @@ class VoiceWorkflowTests(unittest.TestCase):
         self.finish_response()
         for text in ('hoy hace frio','aubar hoy hace frio','aubar no te pongas contento'):
             self.phrase(text)
-            expected=text.removeprefix('aubar ')
+            expected=text
             self.pump(lambda:self.app.recognition_text.get()==expected)
             self.pump(lambda:self.app.automatic_capture.listening.is_set())
             self.assertEqual(self.app.recognized_query,expected)

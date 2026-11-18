@@ -34,9 +34,10 @@ PowerShell en la raíz del proyecto:
 ```
 
 El lanzador prepara el entorno, las dependencias y los modelos de voz. La primera
-ejecución necesita internet para descargarlos; el modelo completo de español
-ocupa unos 1,4 GB. Esperar **Reconocimiento listo** antes de hablar: la carga
-inicial del modelo puede tardar unos 25 segundos.
+puesta en marcha necesita internet para descargarlos. El reconocimiento usa
+**Whisper small local en CPU**, con unos 486 MB de archivos. Esperar
+**Reconocimiento listo** antes de hablar. Vosk fue retirado del panel.
+Ver [instalación y límites del reconocimiento](docs/RECONOCIMIENTO_VOZ.md).
 
 En **Dispositivo**, conectar el puerto del ESP32. En **Micrófono**, elegir la
 entrada y activar la escucha automática, o mantener pulsado el botón para hablar.
