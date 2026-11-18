@@ -17,6 +17,7 @@ class GroqConfig:
     api_key: str=field(repr=False)
     model: str=DEFAULT_MODEL
     timeout_seconds: float=DEFAULT_TIMEOUT
+    director: str='groq'
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ def load_groq_config(env_path=ENV_PATH,environ=None):
     except (OSError,UnicodeError):
         return ConfigState(None,'No se pudo leer .env. Revisá el archivo y sus permisos.')
     environment=os.environ if environ is None else environ
-    for name in ('GROQ_API_KEY','GROQ_MODEL','GROQ_TIMEOUT_SECONDS'):
+    for name in ('GROQ_API_KEY','GROQ_MODEL','GROQ_TIMEOUT_SECONDS','AUBAR_DIRECTOR'):
         if name in environment:
             values[name]=environment[name]
 
@@ -64,5 +65,8 @@ def load_groq_config(env_path=ENV_PATH,environ=None):
             raise ValueError
     except (TypeError,ValueError):
         return ConfigState(None,'GROQ_TIMEOUT_SECONDS debe ser un número entre 1 y 120.')
-    return ConfigState(GroqConfig(key,model,timeout),
+    director=values.get('AUBAR_DIRECTOR','groq')
+    if director not in ('groq','local'):
+        return ConfigState(None,'AUBAR_DIRECTOR debe ser groq o local.')
+    return ConfigState(GroqConfig(key,model,timeout,director),
         'Configuración local lista. La clave y el acceso al modelo todavía no se comprobaron con Groq.')

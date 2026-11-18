@@ -14,6 +14,9 @@ la placa por USB. Para controlarlo por voz se utiliza el panel de la PC;
 también permite conversar con Groq, escuchar las respuestas con la voz local
 Onyx y abrir, buscar y reproducir videos de YouTube en el navegador.
 
+El panel también mide uso de Groq, reutiliza solicitudes idénticas con su contexto
+y respeta las esperas por límite. Ver [eficiencia de Groq](docs/GROQ_EFICIENCIA.md).
+
 <img src="docs/images/aubar-retrato-esp32.jpg" alt="Fotografía del retrato animado de Nahuel funcionando en la pantalla del ESP32" width="260">
 
 Retrato nuevo funcionando en la placa, fotografiado el 13 de noviembre de 2026.
@@ -81,6 +84,13 @@ elige gestos y ajustes de ritmo, energía y pausas junto con el texto. El panel
 ejecuta el plan siguiendo el audio y conserva la emoción durante el movimiento
 de boca. Onyx aproxima la intención con esos controles; no ofrece actuación
 emocional nativa.
+
+Está disponible el piloto de [Aubar Director local](docs/AUBAR_DIRECTOR.md),
+preparado para el catálogo propio y Kokoro/Onyx. En `AUBAR_DIRECTOR=local`, Groq
+genera solamente el contenido y el director local elige la actuación; una duda
+conserva las palabras con gesto neutral. El modo anterior sigue predeterminado
+mientras se revisa el piloto. La documentación incluye preparación, entrenamiento,
+resultados completos y una prueba visual con audios en `tmp/aubar-director-v1/`.
 
 | Acción | Ejemplo de voz |
 | --- | --- |

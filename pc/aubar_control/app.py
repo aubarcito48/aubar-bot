@@ -245,6 +245,7 @@ class AubarApp:
     def reload_groq_configuration(self):
         self._invalidate_ai_turn()
         self.conversation.reset()
+        self._clear_groq_cache()
         self._last_ai_reply=None
         self._last_ai_performance=None
         state=self.config_loader()
@@ -308,6 +309,9 @@ class AubarApp:
             row=7,column=0,sticky="ew",pady=(10,6))
         ttk.Label(panel,textvariable=self.ai_avatar_message,style="Muted.TLabel",wraplength=600).grid(
             row=8,column=0,sticky="ew")
+        self.groq_usage_message=tk.StringVar(value='Groq: sin consultas en esta sesión.')
+        ttk.Label(panel,textvariable=self.groq_usage_message,style="Muted.TLabel",wraplength=600).grid(
+            row=9,column=0,sticky="ew",pady=(6,0))
         self._ai_controls()
         self._speech_controls()
 
@@ -378,12 +382,29 @@ class AubarApp:
     def new_conversation(self):
         self._invalidate_ai_turn()
         self.conversation.reset()
+        self._clear_groq_cache()
         self._last_ai_reply=None
         self._last_ai_performance=None
         self.ai_input.set('')
         self._show_ai_response('')
         self._cancel_status('Conversación nueva. Aubar no conserva el contexto anterior.')
         self._ai_controls()
+
+    def _clear_groq_cache(self):
+        clear=getattr(self.ai_service,'clear_cache',None)
+        if callable(clear):
+            clear()
+
+    def _refresh_groq_usage(self):
+        summary=getattr(self.ai_service,'usage_summary',None)
+        if not callable(summary) or not hasattr(self,'groq_usage_message'):
+            return
+        usage=summary()
+        if usage is None:
+            return
+        self.groq_usage_message.set(
+            f"Groq · sesión: {usage['calls']} intentos · {usage['total_tokens']} tokens informados "
+            f"({usage['usage_responses']} respuestas con uso) · {usage['cache_hits']} reutilizaciones locales.")
 
     def send_ai_message(self):
         self._start_ai_request(self.ai_input.get())
@@ -566,6 +587,8 @@ class AubarApp:
                     if origin=='text':
                         self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
+                    if self.groq_config and self.groq_config.director=='local':
+                        self.ai_message.set(f'Respuesta recibida. Aubar Director local (piloto) · {self.conversation.turn_count} intercambios.')
                     if reply.fallback:
                         self.ai_message.set('Respuesta recibida. No se pudo preparar la interpretación; se usa un gesto neutral.')
                     self._queue_ai_visual(reply.action,'answer')
@@ -583,6 +606,7 @@ class AubarApp:
             self.recognition_message.set(self.ai_message.get())
         if failed and not stale:
             self._reset_ai_visual()
+        self._refresh_groq_usage()
         if self._ai_cancel_completion_message is not None:
             self.ai_message.set(self._ai_cancel_completion_message)
             self._ai_cancel_completion_message=None

@@ -1,0 +1,37 @@
+{
+  "version": "aubar-director-request-pilot-v1",
+  "feature_version": "minilm-multilingual-aubar-request-v1",
+  "model_type": "logistic-regression",
+  "encoder_repository": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "encoder_revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+  "encoder_assets_sha256": {
+    "model.onnx": "98a01d88b7de996cdea58c32ca71208c09968d143798814b2ea09d3439dc334f",
+    "tokenizer.json": "2c3387be76557bd40970cec13153b3bbf80407865484b209e655e5e4729076b8"
+  },
+  "catalog_sha256": "913c212bac37a1bc856a1385e43b16006980ad5e77318605b67b769d47310b33",
+  "labels": [
+    "ANIMATION:angry",
+    "ANIMATION:bored",
+    "ANIMATION:celebrate",
+    "ANIMATION:confused",
+    "ANIMATION:curious",
+    "ANIMATION:excited",
+    "ANIMATION:happy",
+    "ANIMATION:laughing",
+    "ANIMATION:playful",
+    "ANIMATION:proud",
+    "ANIMATION:sad",
+    "ANIMATION:scared",
+    "ANIMATION:shy",
+    "ANIMATION:surprised",
+    "ANIMATION:suspicious",
+    "EXPRESSION:neutral"
+  ],
+  "classifier_sha256": "5423af183aa9a88af1add8f4aea20e36075a7f6f84171298d03d12b7ec2557ea",
+  "confidence_threshold": 0.39999999999999997,
+  "margin_threshold": 0.05,
+  "max_depth": 18,
+  "sklearn_training_version": "1.9.1",
+  "seed": 17011,
+  "corpus_sha256": "087a5306caedbb0d10c529b8bbf1b937e1623e90bfe793fc516529b5cef27306"
+}

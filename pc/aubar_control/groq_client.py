@@ -8,6 +8,7 @@ from threading import Event,Lock
 import time
 from .conversation import ConversationRequest, Message, SYSTEM_PROMPT
 from .ai_avatar import AvatarReply,AVATAR_SCHEMA,AVATAR_INSTRUCTIONS,parse_avatar_reply,normalize_reply
+from .groq_efficiency import GroqEfficiency
 
 HOST='api.groq.com'
 ENDPOINT='/openai/v1/chat/completions'
@@ -45,6 +46,10 @@ class GroqClient:
         self._lock=Lock()
         self._active_cancel=None
         self._active_socket=None
+        self.efficiency=GroqEfficiency()
+
+    def clear_cache(self):
+        self.efficiency.clear_cache()
 
     def complete(self,config,text,*,cancel_event=None):
         if not isinstance(text,ConversationRequest):
@@ -57,6 +62,19 @@ class GroqClient:
             raise GroqCancelled('Consulta cancelada.')
         if remaining<=0:
             raise GroqError('La consulta a Groq agotó el tiempo de espera. Podés iniciar una prueba nueva.')
+        if config.director=='local':
+            from .aubar_director import AubarDirector
+            try:
+                reply=AubarDirector().direct(answer,text)
+                if not isinstance(reply,AvatarReply) or ' '.join(reply.text.split())!=' '.join(answer.split()):
+                    reply=normalize_reply(answer)
+            except (ValueError,OSError,ImportError):
+                reply=normalize_reply(answer)
+            if cancel.is_set():
+                raise GroqCancelled('Consulta cancelada.')
+            if time.monotonic()>=deadline:
+                return normalize_reply(answer)
+            return reply
         # The director receives the full context, but cannot rewrite the answer.
         try:
             reply=self._complete_once(replace(config,timeout_seconds=remaining),text,
@@ -129,6 +147,19 @@ class GroqClient:
         connection=None
         error=None
         answer=None
+        usage=None
+        started=time.perf_counter()
+        reusable=isinstance(text,ConversationRequest)
+        account,cache_key=self.efficiency.keys(config.api_key,payload)
+        if cancel_event is not None and cancel_event.is_set():
+            raise GroqCancelled('Consulta cancelada.')
+        generation,cached,cooldown=self.efficiency.lookup(account,cache_key,reusable=reusable)
+        if cached is not None:
+            if cancel_event is not None and cancel_event.is_set():
+                raise GroqCancelled('Consulta cancelada.')
+            return cached
+        if cooldown:
+            raise GroqError(f'Groq limitó las consultas. Esperá {cooldown} segundos antes de volver a consultar.')
         deadline=time.monotonic()+config.timeout_seconds
         cancel=cancel_event if cancel_event is not None else Event()
         with self._lock:
@@ -159,6 +190,10 @@ class GroqClient:
             remaining()
             response=connection.getresponse()
             if response.status!=200:
+                if response.status==429:
+                    getheader=getattr(response,'getheader',None)
+                    retry_after=getheader('retry-after') if callable(getheader) else None
+                    self.efficiency.rate_limited(account,retry_after)
                 # Never expose or log a remote error body, headers or request.
                 error=status_message(response.status)
             else:
@@ -172,12 +207,15 @@ class GroqClient:
                     if len(data)>MAX_RESPONSE_BYTES:
                         raise ValueError
                 result=json.loads(data)
+                usage=result.get('usage')
                 choice=result['choices'][0]
                 content=choice['message']['content']
-                if choice.get('finish_reason')!='stop' or not isinstance(content,str) or not content.strip():
+                if choice.get('finish_reason')!='stop' or not isinstance(content,str) or not content.strip() or '\x00' in content:
                     error='Groq devolvió una respuesta vacía, incompleta o demasiado larga. Podés iniciar otra prueba.'
                 elif isinstance(text,ConversationRequest) and not content_only:
                     answer=parse_avatar_reply(content.replace(config.api_key,'[credencial oculta]'))
+                    if performance_text is not None and ' '.join(answer.text.split())!=' '.join(performance_text.split()):
+                        error='La interpretación no conservó el texto aprobado.'
                 elif len(content)>2000:
                     error='Groq devolvió una respuesta demasiado larga. Podés iniciar otra prueba.'
                 else:
@@ -201,10 +239,14 @@ class GroqClient:
                     self._active_cancel=None
                     self._active_socket=None
         # Raise outside the handler: no raw transport exception in traceback context.
+        self.efficiency.record(usage,failed=error is not None or cancel.is_set(),
+            elapsed=time.perf_counter()-started)
         if cancel.is_set():
             raise GroqCancelled('Consulta cancelada.')
         if error is not None:
             raise GroqError(error)
+        if reusable and (not isinstance(answer,AvatarReply) or not answer.fallback):
+            self.efficiency.store(cache_key,answer,generation)
         return answer
 
     def cancel(self,cancel_event):
@@ -236,6 +278,15 @@ class GroqService:
     def busy(self):
         with self._lock:
             return self._future is not None and not self._future.done()
+
+    def clear_cache(self):
+        clear=getattr(self.client,'clear_cache',None)
+        if callable(clear):
+            clear()
+
+    def usage_summary(self):
+        efficiency=getattr(self.client,'efficiency',None)
+        return efficiency.snapshot() if efficiency is not None else None
 
     def submit(self,config,text):
         with self._lock:
@@ -295,4 +346,5 @@ class GroqService:
                 return
             self._closed=True
         self.cancel()
+        self.clear_cache()
         self._executor.shutdown(wait=False,cancel_futures=True)

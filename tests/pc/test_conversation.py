@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import Mock
 
 import test_app
 from test_groq_client import CONFIG, KEY, Connection, ControlledClient, completion
@@ -91,6 +92,19 @@ class ConversationPanelTests(unittest.TestCase):
         self.app.ai_input.set(text)
         self.app.send_ai_message()
         self.pump(lambda:self.app._ai_future is None)
+
+    def test_reset_reload_and_usage_panel_use_session_policy(self):
+        self.client.clear_cache=Mock()
+        self.app.new_conversation()
+        self.client.clear_cache.assert_called_once()
+        self.app.reload_groq_configuration()
+        self.assertEqual(self.client.clear_cache.call_count,2)
+        self.app.ai_service.usage_summary=lambda:dict(calls=2,total_tokens=125,
+            usage_responses=1,cache_hits=1)
+        self.app._refresh_groq_usage()
+        self.assertIn('2 intentos',self.app.groq_usage_message.get())
+        self.assertIn('125 tokens informados',self.app.groq_usage_message.get())
+        self.assertIn('1 reutilizaciones locales',self.app.groq_usage_message.get())
 
     def test_followups_use_context_and_connection_test_does_not_enter_history(self):
         self.client.release.set()

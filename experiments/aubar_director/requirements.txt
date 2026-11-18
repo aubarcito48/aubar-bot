@@ -1,0 +1,2 @@
+-r ../../pc/requirements-director.txt
+scikit-learn==1.9.1

@@ -1,0 +1,2 @@
+# Optional runtime for experimental Aubar Director. ONNX Runtime/NumPy are supplied by Kokoro.
+tokenizers==0.23.3

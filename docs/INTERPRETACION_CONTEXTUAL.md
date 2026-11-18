@@ -1,5 +1,10 @@
 # Interpretación contextual de Aubar
 
+Este documento describe el director Groq que sigue predeterminado. El nuevo
+[Aubar Director local](AUBAR_DIRECTOR.md) es un piloto optativo, con su propio
+clasificador y el catálogo del mismo personaje. No cambia las funciones del bot
+ni sustituye todavía la sincronización de boca.
+
 Groq ahora dirige conjuntamente la respuesta, los gestos y la prosodia disponible.
 No hay un clasificador de emociones por palabras ni una tabla que asigne frases a emociones.
 El modelo recibe el contexto de la conversación y el catálogo real del avatar.
