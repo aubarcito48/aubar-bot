@@ -1,5 +1,6 @@
 """Session-only conversation; commit complete successful turns atomically."""
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 SYSTEM_PROMPT=(
     'Sos Aubar, un asistente de escritorio cercano, curioso y respetuoso. '
@@ -33,6 +34,8 @@ class ConversationRequest:
     revision: int
     question: str=field(repr=False)
     messages: tuple[Message,...]=field(repr=False)
+    source_context: tuple[Message,...]=field(default=(),repr=False)
+    request_id: str=field(default_factory=lambda:str(uuid4()),repr=False,compare=False)
 
 
 class Conversation:

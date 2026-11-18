@@ -17,6 +17,9 @@ Onyx y abrir, buscar y reproducir videos de YouTube en el navegador.
 El panel también mide uso de Groq, reutiliza solicitudes idénticas con su contexto
 y respeta las esperas por límite. Ver [eficiencia de Groq](docs/GROQ_EFICIENCIA.md).
 
+Puede consultar el portfolio, enviar WhatsApp por orden explícita y avisar de
+mensajes nuevos con Onyx: [configuración, alcance y verificación](docs/INTEGRACIONES.md).
+
 <img src="docs/images/aubar-retrato-esp32.jpg" alt="Fotografía del retrato animado de Nahuel funcionando en la pantalla del ESP32" width="260">
 
 Retrato nuevo funcionando en la placa, fotografiado el 13 de noviembre de 2026.

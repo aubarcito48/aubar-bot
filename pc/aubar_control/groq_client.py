@@ -9,6 +9,8 @@ import time
 from .conversation import ConversationRequest, Message, SYSTEM_PROMPT
 from .ai_avatar import AvatarReply,AVATAR_SCHEMA,AVATAR_INSTRUCTIONS,parse_avatar_reply,normalize_reply
 from .groq_efficiency import GroqEfficiency
+from .connected_sources import ConnectedSources,SourcesCancelled,SOURCE_POLICY,unavailable_reply
+from .whatsapp_control import WhatsAppControl,WhatsAppError,parse_send,is_inbox_query
 
 HOST='api.groq.com'
 ENDPOINT='/openai/v1/chat/completions'
@@ -41,20 +43,45 @@ def status_message(status):
 
 
 class GroqClient:
-    def __init__(self,connection_factory=http.client.HTTPSConnection):
+    def __init__(self,connection_factory=http.client.HTTPSConnection,*,sources=None,whatsapp=None):
         self.connection_factory=connection_factory
         self._lock=Lock()
         self._active_cancel=None
         self._active_socket=None
         self.efficiency=GroqEfficiency()
+        self.sources=sources if sources is not None else ConnectedSources()
+        self.whatsapp=whatsapp if whatsapp is not None else WhatsAppControl()
 
     def clear_cache(self):
         self.efficiency.clear_cache()
+        self.sources.clear_cache()
 
     def complete(self,config,text,*,cancel_event=None):
         if not isinstance(text,ConversationRequest):
             return self._complete_once(config,text,cancel_event=cancel_event)
         cancel=cancel_event if cancel_event is not None else Event()
+        if cancel.is_set():
+            raise GroqCancelled('Consulta cancelada.')
+        try:
+            if is_inbox_query(text.question):
+                return replace(normalize_reply(self.whatsapp.recent(config,cancel)),fallback=False)
+            outgoing=parse_send(text.question)
+            if outgoing is not None:
+                answer=self.whatsapp.send(config,outgoing,text.request_id,cancel)
+                return replace(normalize_reply(answer),fallback=False)
+        except WhatsAppError as error:
+            return replace(normalize_reply(str(error)),fallback=False)
+        if config.portfolio_api_url or config.whatsapp_health_url:
+            try:
+                context=self.sources.context(config,text,cancel)
+            except SourcesCancelled:
+                raise GroqCancelled('Consulta cancelada.') from None
+            text=replace(text,source_context=context)
+            if cancel.is_set():
+                raise GroqCancelled('Consulta cancelada.')
+            unavailable=unavailable_reply(context)
+            if unavailable:
+                return replace(normalize_reply(unavailable),fallback=False)
         deadline=time.monotonic()+config.timeout_seconds
         answer=self._complete_once(config,text,cancel_event=cancel,content_only=True)
         remaining=deadline-time.monotonic()
@@ -144,6 +171,10 @@ class GroqClient:
             for message in payload['messages']:
                 if message['role']=='system':
                     message['role']='developer'
+        if content_only and text.source_context:
+            payload['messages'][0]['content']+='\n'+SOURCE_POLICY
+            payload['messages'][-1:-1]=[{'role':m.role,'content':m.content.replace(config.api_key,'[credencial oculta]')}
+                for m in text.source_context]
         connection=None
         error=None
         answer=None
@@ -251,6 +282,8 @@ class GroqClient:
 
     def cancel(self,cancel_event):
         cancel_event.set()
+        self.sources.cancel(cancel_event)
+        self.whatsapp.cancel(cancel_event)
         with self._lock:
             if self._active_cancel is not cancel_event:
                 return
@@ -287,6 +320,10 @@ class GroqService:
     def usage_summary(self):
         efficiency=getattr(self.client,'efficiency',None)
         return efficiency.snapshot() if efficiency is not None else None
+
+    def sources_status(self):
+        sources=getattr(self.client,'sources',None)
+        return sources.status() if sources is not None else ''
 
     def submit(self,config,text):
         with self._lock:

@@ -1,0 +1,23 @@
+{
+  "name": "aubar-whatsapp-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local WhatsApp bridge to the existing portfolio Aubar API",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "demo": "node --env-file-if-exists=.env src/demo.js --mock",
+    "demo:api": "node --env-file-if-exists=.env src/demo.js",
+    "check:api": "node --env-file-if-exists=.env scripts/check-api.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "pino": "9.14.0",
+    "qrcode-terminal": "0.12.0",
+    "sharp": "0.35.5"
+  }
+}

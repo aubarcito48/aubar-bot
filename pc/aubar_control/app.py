@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Event
+from collections import deque
 import tkinter as tk
 from tkinter import ttk
 
@@ -25,6 +26,7 @@ from .conversation import Conversation
 from .ai_avatar import AvatarCue,normalize_reply,safe_avatar_action
 from .youtube import open_youtube
 from .microphone_probe import MicrophoneProbe
+from .whatsapp_control import InboxPoller,parse_send,WhatsAppError,is_inbox_query
 
 BG = "#f5f7fc"
 INK = "#3e4e65"
@@ -47,6 +49,13 @@ class AubarApp:
         self._probe_playback_token=None
         self.config_loader=config_loader
         self.ai_service=ai_service or GroqService()
+        self.whatsapp_inbox=InboxPoller()
+        self.whatsapp_status=tk.StringVar(value='WhatsApp: control local sin configurar.')
+        self.whatsapp_read_enabled=tk.BooleanVar(value=True)
+        self._whatsapp_notices=deque(maxlen=10)
+        self._whatsapp_history=deque(maxlen=100)
+        self._ai_local_whatsapp=False
+        self._ai_whatsapp_read=False
         self._avatar_generation=0
         self._pending_ai_avatar=None
         self._ai_avatar_inflight=False
@@ -199,6 +208,9 @@ class AubarApp:
         ai_tab=ttk.Frame(notebook,padding=16)
         notebook.add(ai_tab,text="IA")
         self._build_ai_configuration(ai_tab)
+        whatsapp_tab=ttk.Frame(notebook,padding=16)
+        notebook.add(whatsapp_tab,text="WhatsApp")
+        self._build_whatsapp(whatsapp_tab)
         self._build_microphone(microphone_tab)
         main = device_tab
         main.columnconfigure(0, weight=1)
@@ -250,6 +262,13 @@ class AubarApp:
         self._last_ai_performance=None
         state=self.config_loader()
         self.groq_config=state.config
+        self.whatsapp_inbox.configure(self.groq_config)
+        self._whatsapp_notices.clear()
+        self._whatsapp_history.clear()
+        self.whatsapp_status.set('Conectando al puente local de WhatsApp…' if self.groq_config and self.groq_config.whatsapp_control_url
+            else 'WhatsApp: control local sin configurar.')
+        if hasattr(self,'whatsapp_messages'):
+            self._render_whatsapp()
         self.groq_config_message.set(state.message)
         if hasattr(self,'ai_response'):
             self._show_ai_response('')
@@ -312,6 +331,9 @@ class AubarApp:
         self.groq_usage_message=tk.StringVar(value='Groq: sin consultas en esta sesión.')
         ttk.Label(panel,textvariable=self.groq_usage_message,style="Muted.TLabel",wraplength=600).grid(
             row=9,column=0,sticky="ew",pady=(6,0))
+        self.groq_sources_message=tk.StringVar(value='')
+        ttk.Label(panel,textvariable=self.groq_sources_message,style='Muted.TLabel',wraplength=600).grid(
+            row=10,column=0,sticky='ew')
         self._ai_controls()
         self._speech_controls()
 
@@ -365,6 +387,8 @@ class AubarApp:
         self._discard_ai_speech()
 
     def _cancel_status(self,message):
+        if self._ai_local_whatsapp and self._ai_future is not None and 'Puede haberse transmitido' not in message:
+            message+=' Puede haberse transmitido: revisá WhatsApp antes de repetirlo.'
         self._ai_cancel_completion_message=message if self._ai_future is not None else None
         self.ai_message.set('Cancelando consulta…' if self._ai_future is not None and not self._ai_future.done() else message)
 
@@ -374,7 +398,8 @@ class AubarApp:
         self._invalidate_ai_turn()
         self.recognized_query=None
         self._show_ai_response(self.conversation.transcript)
-        self._cancel_status('Consulta cancelada. El contexto completado se conserva.')
+        self._cancel_status('Se canceló la espera del envío. Puede haberse transmitido: revisá WhatsApp antes de repetirlo.'
+            if self._ai_local_whatsapp else 'Consulta cancelada. El contexto completado se conserva.')
         self.recognition_message.set('Consulta cancelada.')
         self._ai_controls()
         self._audio_controls()
@@ -417,6 +442,11 @@ class AubarApp:
                                 'Hay una respuesta en curso. Esperá a que termine o pulsá Cancelar.')
             return False
         text=text.replace(self.groq_config.api_key,'[credencial oculta]')
+        self._ai_whatsapp_read=is_inbox_query(text)
+        try:
+            self._ai_local_whatsapp=parse_send(text) is not None
+        except WhatsAppError:
+            self._ai_local_whatsapp=True
         try:
             request=self.conversation.prepare(text)
         except ValueError as error:
@@ -578,16 +608,28 @@ class AubarApp:
         else:
             if not stale:
                 if request is not None:
-                    if not self.conversation.commit(request,text):
-                        self._ai_controls()
-                        return
-                    self._show_ai_response(self.conversation.transcript)
+                    local_whatsapp=self._ai_local_whatsapp or self._ai_whatsapp_read
+                    if local_whatsapp:
+                        # Never put private WhatsApp content in the next Groq
+                        # request's conversational history.
+                        self.conversation.invalidate_pending()
+                        transcript=self.conversation.transcript
+                        self._show_ai_response((transcript+'\n\n' if transcript else '')+'WhatsApp (local): '+text)
+                        self._whatsapp_history.append('Consulta local:\n'+request.question+'\n\n'+text)
+                        self._render_whatsapp()
+                    else:
+                        if not self.conversation.commit(request,text):
+                            self._ai_controls()
+                            return
+                        self._show_ai_response(self.conversation.transcript)
                     self._last_ai_reply=text
                     self._last_ai_performance=reply
                     if origin=='text':
                         self.ai_input.set('')
                     self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
-                    if self.groq_config and self.groq_config.director=='local':
+                    if self._ai_local_whatsapp or self._ai_whatsapp_read:
+                        self.ai_message.set('Resultado del comando local de WhatsApp. No se consultó Groq.')
+                    elif self.groq_config and self.groq_config.director=='local':
                         self.ai_message.set(f'Respuesta recibida. Aubar Director local (piloto) · {self.conversation.turn_count} intercambios.')
                     if reply.fallback:
                         self.ai_message.set('Respuesta recibida. No se pudo preparar la interpretación; se usa un gesto neutral.')
@@ -601,7 +643,8 @@ class AubarApp:
                     transcript=self.conversation.transcript
                     self._show_ai_response(transcript+'\n\nPrueba de conexión: '+text if transcript else text)
                     self.ai_message.set('Conexión comprobada: Groq respondió usando el modelo configurado.')
-                self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
+                if request is None:
+                    self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
         if origin=='voice' and not stale and failed:
             self.recognition_message.set(self.ai_message.get())
         if failed and not stale:
@@ -612,6 +655,57 @@ class AubarApp:
             self._ai_cancel_completion_message=None
         self._ai_controls()
         self._audio_controls()
+
+    def _build_whatsapp(self,panel):
+        panel.columnconfigure(0,weight=1)
+        panel.rowconfigure(3,weight=1)
+        ttk.Label(panel,text='Mensajes de WhatsApp',style='Section.TLabel').grid(row=0,column=0,sticky='w')
+        ttk.Label(panel,textvariable=self.whatsapp_status,wraplength=650).grid(row=1,column=0,sticky='ew',pady=(10,8))
+        ttk.Checkbutton(panel,text='Leer las notificaciones con Onyx',variable=self.whatsapp_read_enabled,
+            command=self._clear_whatsapp_audio).grid(row=2,column=0,sticky='w',pady=(0,10))
+        self.whatsapp_messages=tk.Text(panel,height=12,state='disabled',wrap='word',bg='white',fg=INK,
+            font=('Segoe UI',11),relief='flat',padx=12,pady=12)
+        self.whatsapp_messages.grid(row=3,column=0,sticky='nsew')
+        ttk.Label(panel,text='Para enviar, usá IA o tu voz: enviá un WhatsApp a +549XXXXXXXXXX: Hola. '
+            'Solo se admiten los contactos de prueba configurados en el bot. '
+            'Para consultar: mostrá mis mensajes de WhatsApp.',
+            style='Muted.TLabel',wraplength=650).grid(row=4,column=0,sticky='ew',pady=(10,0))
+
+    def _clear_whatsapp_audio(self):
+        self._whatsapp_notices.clear()
+
+    def _render_whatsapp(self):
+        self.whatsapp_messages.configure(state='normal')
+        self.whatsapp_messages.delete('1.0','end')
+        self.whatsapp_messages.insert('end','\n\n'.join(self._whatsapp_history))
+        self.whatsapp_messages.configure(state='disabled')
+        self.whatsapp_messages.see('end')
+
+    def _drain_whatsapp(self):
+        update=self.whatsapp_inbox.tick()
+        if update:
+            status,events,missed=update
+            self.whatsapp_status.set('Puente local conectado. Esperando mensajes nuevos.' if status=='connected'
+                else 'No pude consultar el puente local. Revisá que el bot esté iniciado y el token coincida.')
+            if missed:
+                self.whatsapp_status.set('El puente se reinició o hubo mensajes fuera de la ventana de consulta. Revisá WhatsApp.')
+            for event in events:
+                name=event['name'] or 'el número terminado en '+event['sender'][-4:]
+                self._whatsapp_history.append(name+' ('+event['sender']+'):\n'+event['text'])
+                if self.whatsapp_read_enabled.get() and self.speech_enabled.get():
+                    text='Te llegó un mensaje de '+name+': '+event['text']
+                    if len(text)>1700: text=text[:1650]+'. El texto completo está en la pestaña WhatsApp.'
+                    self._whatsapp_notices.append((time.perf_counter(),text))
+            if events:
+                self._render_whatsapp()
+        while self._whatsapp_notices and time.perf_counter()-self._whatsapp_notices[0][0]>60:
+            self._whatsapp_notices.popleft()
+        if (self._whatsapp_notices and self.whatsapp_read_enabled.get() and self.speech_enabled.get()
+            and not self._ai_turn_busy() and self.audio_phase=='idle' and not self.voice_inflight
+            and self._speech_future is None and not self.speech.busy and self.replies.pending is None):
+            _,text=self._whatsapp_notices.popleft()
+            if self.speak_text(text):
+                self._speech_is_ai=True
 
     def _build_speech(self, panel):
         panel.columnconfigure(0, weight=1)
@@ -728,6 +822,7 @@ class AubarApp:
         return True
 
     def stop_speech(self):
+        self._whatsapp_notices.clear()
         had_pending=(self._pending_reply is not None or self.ai_replies.pending is not None
                      or self._ai_future is not None and (self._ai_origin=='voice' or self._ai_read_text))
         self.replies.cancel()
@@ -1439,6 +1534,10 @@ class AubarApp:
             self._speech_message('Interpretación: '+segment['delivery']+' · Onyx: ritmo, energía y pausas.')
 
     def _drain(self):
+        self._drain_whatsapp()
+        sources_status=getattr(self.ai_service,'sources_status',None)
+        if callable(sources_status):
+            self.groq_sources_message.set(sources_status())
         try:
             while True:
                 operation, result, error = self.events.get_nowait()
@@ -1541,6 +1640,9 @@ class AubarApp:
         neutralize=(owner is not None and self.connected and owner.connection==self.connection_token
                     and owner.control==self._avatar_generation)
         self.closed = True
+        self.whatsapp_inbox.close()
+        self._whatsapp_notices.clear()
+        self._whatsapp_history.clear()
         self._clear_probe_timer()
         self.microphone_probe.stop()
         self._invalidate_ai_turn(restore_visual=False)
