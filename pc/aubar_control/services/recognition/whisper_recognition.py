@@ -54,10 +54,10 @@ class WhisperRecognizer:
         frames=resampler.resample(frame)+resampler.resample(None)
         return np.concatenate([part.to_ndarray().reshape(-1) for part in frames])
 
-    def recognize_automatic(self,recording):
-        return self.recognize(recording,automatic=True)
+    def recognize_automatic(self,recording,*,youtube_query=None):
+        return self.recognize(recording,automatic=True,youtube_query=youtube_query)
 
-    def recognize(self,recording,*,automatic=False):
+    def recognize(self,recording,*,automatic=False,youtube_query=None):
         if (not recording.pcm or len(recording.pcm)%2 or type(recording.sample_rate) is not int
             or not 8000<=recording.sample_rate<=192000 or recording.duration>12):
             raise RecognitionError('La captura no tiene un formato de audio válido.')
@@ -87,11 +87,13 @@ class WhisperRecognizer:
             if normalize(text) in ('aubar','au bar','a un bar'):
                 return RecognitionResult(text,None,'Decí un comando o una pregunta, no solamente el nombre.')
             action=match_command(text)
-            youtube=match_youtube_command(text)
+            youtube=match_youtube_command(text,previous_query=youtube_query)
             try: sending=parse_send(text) is not None
             except WhatsAppError: sending=False
-            # Keep conservative gates for actions, especially external sends.
-            if action is not None or youtube is not None or sending:
+            # Browser searches/playback use the normal transcription gate above:
+            # English artists/titles often score lower inside Spanish speech.
+            # Keep the stricter gate for device actions and external sends.
+            if action is not None or sending:
                 if min(probabilities)<.6 or sum(probabilities)/len(probabilities)<.8:
                     return RecognitionResult(text,None,'La voz no se reconoció con claridad. Repetí la orden.')
             if action is not None:

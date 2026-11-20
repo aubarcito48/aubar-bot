@@ -1,0 +1,2 @@
+# Qt Community Edition. See THIRD_PARTY_NOTICES.md for redistribution conditions.
+PySide6-Essentials==6.12.0

@@ -4,6 +4,7 @@ import http.client
 import json
 import re
 import socket
+import webbrowser
 from threading import Lock
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +16,29 @@ from ..config.settings import validate_control_url
 
 class WhatsAppError(Exception):
     pass
+
+
+def is_open_web_command(text):
+    """Only an explicit request to open the fixed WhatsApp Web page."""
+    return bool(re.fullmatch(
+        r'(?:aubar[,.:]?\s+)?(?:por favor[, ]+)?'
+        r'(?:(?:pod[eé]s|puedes)\s+)?'
+        r'(?:abr[ií]|abre|abrir|abrime|[aá]breme)\s+'
+        r'(?:whats\s*app|wsp|wpp)(?:\s+web)?(?:\s+por favor)?[.!]?',
+        ' '.join(text.strip().split()), flags=re.I))
+
+
+def open_whatsapp_web(*, opener=None, cancel_event=None):
+    if cancel_event is not None and cancel_event.is_set():
+        return 'Apertura de WhatsApp Web cancelada.', None
+    try:
+        opened = (opener or webbrowser.open_new_tab)('https://web.whatsapp.com/')
+    except Exception:
+        opened = False
+    if not opened:
+        return 'No se pudo abrir WhatsApp Web. Revisá el navegador predeterminado de Windows.', None
+    message = 'Abrí WhatsApp Web en tu navegador.'
+    return message, message
 
 
 @dataclass(frozen=True)
