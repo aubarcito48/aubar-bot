@@ -13,7 +13,8 @@ enum class PortraitScene : uint8_t {
 
 constexpr PortraitScene portraitExpressionScene(AvatarExpressionId id) {
   switch(id) {
-    case AvatarExpressionId::Happy: case AvatarExpressionId::JoyfulDownRight: return PortraitScene::Joyful;
+    case AvatarExpressionId::Happy: return PortraitScene::Smile;
+    case AvatarExpressionId::JoyfulDownRight: return PortraitScene::Joyful;
     case AvatarExpressionId::Surprised: case AvatarExpressionId::SurprisedLeft: return PortraitScene::Surprised;
     case AvatarExpressionId::PlayfulRight: return PortraitScene::Playful;
     case AvatarExpressionId::Angry: case AvatarExpressionId::AngryLeft:
@@ -44,7 +45,7 @@ constexpr PortraitScene portraitAnimationScene(AvatarAnimationId id) {
     PortraitScene::ListeningVideo, PortraitScene::Thinking, PortraitScene::SearchVideo,
     PortraitScene::Computer, PortraitScene::Excited, PortraitScene::Bored,
     PortraitScene::Suspicious, PortraitScene::Angry, PortraitScene::Sleeping,
-    PortraitScene::Joyful, PortraitScene::UpVideo, PortraitScene::Confused,
+    PortraitScene::HappyVideo, PortraitScene::UpVideo, PortraitScene::Confused,
     PortraitScene::Surprised, PortraitScene::Proud, PortraitScene::Shy,
     PortraitScene::Sad, PortraitScene::Laughing, PortraitScene::Scared,
     PortraitScene::Playful, PortraitScene::Celebrate

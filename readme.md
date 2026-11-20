@@ -33,13 +33,15 @@ portfolio, YouTube y el puente de WhatsApp.
 | Python y Tkinter | Panel de escritorio, micrófono e integraciones. |
 | Whisper small | Reconocimiento local de voz en CPU; reemplaza a Vosk. |
 | Kokoro/Onyx (`am_onyx`) | Voz local; reemplaza a la voz Dora. |
-| Groq | Respuestas con IA y dirección de la actuación, mediante internet y una clave propia. |
+| Groq | Generación del texto de las respuestas, mediante internet y una clave propia. |
+| Aubar Director local | Selección de gestos y ajustes de actuación sin una segunda consulta a Groq. |
 | C++ y Arduino ESP32 | Pantalla, animaciones y comunicación USB del retrato. |
 | Node.js | Puente opcional de WhatsApp. |
 
 La boca acompaña el audio; no representa una sincronización exacta de cada
-fonema. El director local de actuación es opcional y no reemplaza el modelo
-de conversación de Groq.
+fonema. El director local es la opción predeterminada y no reemplaza el modelo
+de conversación de Groq. YouTube, portfolio y WhatsApp conservan sus controles
+locales: una elección de gesto no ejecuta una función.
 
 ## Requisitos
 
@@ -91,10 +93,17 @@ Desde la raíz del proyecto, con Python 3.11 o superior:
 El lanzador prepara el entorno y los modelos cuando faltan. Las credenciales se
 configuran en `.env` a partir de `.env.example` y permanecen fuera de Git.
 
-La primera ejecución crea `.venv`, instala `pc/requirements.txt` y descarga
-Whisper y Kokoro. Puede tardar por las descargas. Las siguientes reutilizan esos
+La primera ejecución crea `.venv`, instala las dependencias y prepara
+Whisper, Kokoro y el codificador de Aubar Director. Puede tardar por las descargas.
+Las siguientes reutilizan esos
 archivos. Si PowerShell bloquea el script, revisá la política de ejecución de tu
 equipo; no hace falta cambiar la política de toda la máquina para este proyecto.
+
+`AUBAR_DIRECTOR=local` selecciona la actuación local. Los archivos anteriores que
+indican `groq` también se interpretan como `local`: Groq genera solo el contenido.
+Si el director no puede elegir una actuación con confianza, conserva el texto
+y usa un gesto neutral. Un pedido explícito de sonreír usa la sonrisa suave;
+las risas y la alegría intensa conservan sus gestos propios.
 
 ### Comprobar el panel
 
@@ -165,7 +174,7 @@ Con Arduino CLI instalado y disponible en `PATH`, desde la raíz:
 ```powershell
 arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
 arduino-cli core install esp32:esp32@3.3.8 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-.\.venv\Scripts\python.exe tools\avatar\generate_portrait_firmware.py --paths-only
+.\.venv\Scripts\python.exe tools\avatar\generate_portrait_firmware.py --refresh-path
 arduino-cli board list
 ```
 
@@ -195,7 +204,7 @@ una partición predeterminada pequeña no alcanza para el banco de imágenes.
 | No se escucha | Revisá el dispositivo de salida, volumen y activación de voz en el panel. |
 | Groq no responde | Revisá tu clave, conexión y límites del proveedor. No compartas `.env` al pedir ayuda. |
 | La placa no aparece | Usá un cable de datos y comprobá que otro programa no tenga ocupado el puerto. |
-| Falla `.incbin` o falta `portrait_asset_path.h` | Ejecutá `generate_portrait_firmware.py --paths-only` desde la raíz. |
+| Falla `.incbin` o falta `portrait_asset_path.h` | Ejecutá `generate_portrait_firmware.py --refresh-path` desde la raíz. |
 | El programa no entra en memoria | Conservá `partitions.csv`, flash de 16 MB y `upload.maximum_size=12582912`. |
 | WhatsApp no conecta | Revisá contactos autorizados, vinculación y que el puente siga ejecutándose. |
 
@@ -221,7 +230,7 @@ El firmware se abre con `firmware/KirbyPantalla/KirbyPantalla.ino`. Al mover el
 checkout se actualiza la ruta del banco de imágenes, sin regenerarlo:
 
 ```powershell
-.\.venv\Scripts\python.exe tools\avatar\generate_portrait_firmware.py --paths-only
+.\.venv\Scripts\python.exe tools\avatar\generate_portrait_firmware.py --refresh-path
 ```
 
 Los recursos y modelos conservan las licencias incluidas en sus archivos y descargas.

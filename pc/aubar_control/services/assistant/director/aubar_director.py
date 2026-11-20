@@ -1,4 +1,4 @@
-"""Aubar's experimental local performance director; never executes functions.
+"""Aubar's local performance director; never executes functions.
 
 The learned pilot recognizes requested acting styles, not a person's emotion.
 The full visual catalog remains available through explicit local commands.
@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from functools import lru_cache
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from ....models.avatar.ai_avatar import AvatarReply, PerformanceSegment, normalize_reply, safe_avatar_action
 from ....models.avatar.catalog import CATALOG
 from ...recognition.voice_commands import match_command
-from .director_encoder import ENCODER_VERSION, REVISION
+from .director_encoder import ENCODER_VERSION, REVISION, instruction
+from ...recognition.voice_commands import normalize
 
 WEIGHTS = Path(__file__).with_name('director_weights')
 FEATURE_VERSION = ENCODER_VERSION
@@ -126,6 +128,37 @@ def direct_reply(text, question):
         # This chooses a visual. No USB command, browser action or MODE is executed.
         return DirectorDecision(AvatarReply(neutral.text, action, False), 'explicit-catalog',
                                 action.command + ':' + action.argument, 1.0)
+    # A requested gentle smile is different from laughter or exuberant joy.
+    # Ignore quoted dialogue: the words to speak must not select an emotion.
+    cue = normalize(instruction(question))
+    negative = ('sin sonreir', 'sin sonrisa', 'without smiling', 'no smile',
+                'no actues', 'no quiero que actues', 'sin actuar', 'sin representarlo',
+                'do not act', 'without acting', 'just define', 'solo defini')
+    if any(phrase in cue for phrase in negative):
+        return DirectorDecision(AvatarReply(neutral.text, neutral.action, False),
+                                'explicit-neutral', 'EXPRESSION:neutral', 1.0)
+    acting = re.search(r'\b(?:decime|deci|decilo|dime|di|dilo|lee|leeme|habla|hables|'
+                       r'responde|actua|interpreta|say|reply|read|speak|act|perform)\b', cue)
+    if (cue in ('sonrei', 'sonrie', 'sonreir', 'smile') or acting and (
+        any(word in cue.split() for word in ('sonriendo', 'smiling')) or
+        any(phrase in cue for phrase in ('con una sonrisa', 'con sonrisa', 'with a smile')))):
+        action, _ = safe_avatar_action('EXPRESSION', 'contento')
+        return DirectorDecision(AvatarReply(neutral.text, action, False),
+                                'explicit-smile', 'EXPRESSION:contento', 1.0)
+    # Direct acting instructions take priority over uncertain learned wording.
+    # Only inspect the start of the instruction, never the quoted spoken words.
+    if acting and not re.search(r'\b(?:explicame|explica|defini|define|significa|explain|means)\b', cue):
+        delivery = cue[acting.end():].strip()
+        for identifier, forms in (
+            ('laughing', r'riendo|con risa|con una risa|laughing|with laughter'),
+            ('sad', r'con tristeza|triste|tristemente|sadly|with sadness'),
+            ('angry', r'con enojo|enojado|con bronca|angrily|with anger'),
+            ('happy', r'contento|alegre|con alegria|happily|cheerfully'),
+        ):
+            if re.match(r'(?:(?:esto|eso|el texto|un texto|la frase|este mensaje)\s+)?(?:'+forms+r')\b', delivery):
+                action, _ = safe_avatar_action('ANIMATION', identifier)
+                return DirectorDecision(AvatarReply(neutral.text, action, False),
+                                        'explicit-style', 'ANIMATION:'+identifier, 1.0)
     try:
         label, confidence, accepted = predict_style(question)
         if not accepted:

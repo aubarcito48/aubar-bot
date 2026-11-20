@@ -632,7 +632,7 @@ class AubarApp:
                     if self._ai_local_whatsapp or self._ai_whatsapp_read:
                         self.ai_message.set('Resultado del comando local de WhatsApp. No se consultó Groq.')
                     elif self.groq_config and self.groq_config.director=='local':
-                        self.ai_message.set(f'Respuesta recibida. Aubar Director local (piloto) · {self.conversation.turn_count} intercambios.')
+                        self.ai_message.set(f'Respuesta recibida. Aubar Director local · {self.conversation.turn_count} intercambios.')
                     if reply.fallback:
                         self.ai_message.set('Respuesta recibida. No se pudo preparar la interpretación; se usa un gesto neutral.')
                     self._queue_ai_visual(reply.action,'answer')

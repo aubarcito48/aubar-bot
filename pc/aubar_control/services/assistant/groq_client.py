@@ -7,7 +7,7 @@ import socket
 from threading import Event,Lock
 import time
 from .conversation import ConversationRequest, Message, SYSTEM_PROMPT
-from ...models.avatar.ai_avatar import AvatarReply,AVATAR_SCHEMA,AVATAR_INSTRUCTIONS,parse_avatar_reply,normalize_reply
+from ...models.avatar.ai_avatar import AvatarReply,normalize_reply
 from .groq_efficiency import GroqEfficiency
 from ...integrations.portfolio import ConnectedSources,SourcesCancelled,SOURCE_POLICY,unavailable_reply
 from ...integrations.whatsapp import WhatsAppControl,WhatsAppError,parse_send,is_inbox_query
@@ -89,34 +89,20 @@ class GroqClient:
             raise GroqCancelled('Consulta cancelada.')
         if remaining<=0:
             raise GroqError('La consulta a Groq agotó el tiempo de espera. Podés iniciar una prueba nueva.')
-        if config.director=='local':
-            from .director.aubar_director import AubarDirector
-            try:
-                reply=AubarDirector().direct(answer,text)
-                if not isinstance(reply,AvatarReply) or ' '.join(reply.text.split())!=' '.join(answer.split()):
-                    reply=normalize_reply(answer)
-            except (ValueError,OSError,ImportError):
-                reply=normalize_reply(answer)
-            if cancel.is_set():
-                raise GroqCancelled('Consulta cancelada.')
-            if time.monotonic()>=deadline:
-                return normalize_reply(answer)
-            return reply
-        # The director receives the full context, but cannot rewrite the answer.
+        from .director.aubar_director import AubarDirector
         try:
-            reply=self._complete_once(replace(config,timeout_seconds=remaining),text,
-                cancel_event=cancel,performance_text=answer)
-        except GroqCancelled:
-            raise
-        except GroqError:
-            if cancel.is_set():
-                raise GroqCancelled('Consulta cancelada.')
-            return normalize_reply(answer)
-        if ' '.join(reply.text.split())!=' '.join(answer.split()):
+            reply=AubarDirector().direct(answer,text)
+            if not isinstance(reply,AvatarReply) or reply.text!=answer.strip():
+                reply=normalize_reply(answer)
+        except (ValueError,OSError,ImportError):
+            reply=normalize_reply(answer)
+        if cancel.is_set():
+            raise GroqCancelled('Consulta cancelada.')
+        if time.monotonic()>=deadline:
             return normalize_reply(answer)
         return reply
 
-    def _complete_once(self,config,text,*,cancel_event=None,content_only=False,performance_text=None):
+    def _complete_once(self,config,text,*,cancel_event=None,content_only=False):
         if isinstance(text,ConversationRequest):
             messages=text.messages
         else:
@@ -151,21 +137,6 @@ class GroqClient:
                     'Keep ordinary replies short. Do not claim to have performed unconfirmed actions. '
                     'For YouTube actions, explain the local commands: abrir YouTube, buscar videos de [tema] en YouTube, '
                     'or poner [tema] en YouTube. You do not open the browser through this reply.')
-            else:
-                # The approved text is immutable, so the director needs the
-                # dialogue and its own instructions, not a second content task.
-                payload['messages'][0]['content']=AVATAR_INSTRUCTIONS
-                payload['messages'].append({'role':'assistant','content':performance_text})
-                payload['messages'].append({'role':'user','content':
-                    'Prepará únicamente la interpretación de la respuesta que acabás de dar. '
-                    'No vuelvas a contestar la conversación. Conservá exactamente este texto aprobado, '
-                    'incluidas todas sus palabras, y dividilo en fragments solo si cambia la intención. '
-                    'Usá la emoción y el estilo pedidos en la conversación original. '
-                    'El campo text debe ser exactamente: '+json.dumps(performance_text,ensure_ascii=False)})
-                payload['response_format']=(
-                    {'type':'json_schema','json_schema':{'name':'aubar_reply','strict':True,'schema':AVATAR_SCHEMA}}
-                    if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b','qwen/qwen3.8-27b','meta-models/muse-spark-open')
-                    else {'type':'json_object'})
         if config.model in ('openai/gpt-oss-20b','openai/gpt-oss-120b'):
             payload.update(reasoning_effort='medium' if content_only else 'low',include_reasoning=False)
             for message in payload['messages']:
@@ -243,10 +214,6 @@ class GroqClient:
                 content=choice['message']['content']
                 if choice.get('finish_reason')!='stop' or not isinstance(content,str) or not content.strip() or '\x00' in content:
                     error='Groq devolvió una respuesta vacía, incompleta o demasiado larga. Podés iniciar otra prueba.'
-                elif isinstance(text,ConversationRequest) and not content_only:
-                    answer=parse_avatar_reply(content.replace(config.api_key,'[credencial oculta]'))
-                    if performance_text is not None and ' '.join(answer.text.split())!=' '.join(performance_text.split()):
-                        error='La interpretación no conservó el texto aprobado.'
                 elif len(content)>2000:
                     error='Groq devolvió una respuesta demasiado larga. Podés iniciar otra prueba.'
                 else:

@@ -19,7 +19,7 @@ class GroqConfig:
     api_key: str=field(repr=False)
     model: str=DEFAULT_MODEL
     timeout_seconds: float=DEFAULT_TIMEOUT
-    director: str='groq'
+    director: str='local'
     portfolio_api_url: str=''
     whatsapp_health_url: str=''
     whatsapp_control_url: str=''
@@ -74,9 +74,11 @@ def load_groq_config(env_path=ENV_PATH,environ=None):
             raise ValueError
     except (TypeError,ValueError):
         return ConfigState(None,'GROQ_TIMEOUT_SECONDS debe ser un número entre 1 y 120.')
-    director=values.get('AUBAR_DIRECTOR','groq')
+    director=values.get('AUBAR_DIRECTOR','local')
     if director not in ('groq','local'):
         return ConfigState(None,'AUBAR_DIRECTOR debe ser groq o local.')
+    # Accept older .env files without restoring a second remote acting request.
+    director='local'
     try:
         portfolio=validate_source_url(values.get('AUBAR_PORTFOLIO_API_URL') or '',health=False)
         whatsapp=validate_source_url(values.get('AUBAR_WHATSAPP_HEALTH_URL') or '',health=True)
