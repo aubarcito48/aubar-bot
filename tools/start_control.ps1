@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el modelo local de espanol
 & $kirbyPython (Join-Path $kirbyRoot 'tools\speech\install_tts_model.py')
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la voz local de Kokoro.' }
 
-& $kirbyPython -c 'from importlib.metadata import version; assert version("tokenizers") == "0.23.3"'
+& $kirbyPython -c 'import sys; from importlib.metadata import version; assert version(sys.argv[1]) == sys.argv[2]' tokenizers 0.23.3
 if ($LASTEXITCODE -ne 0) {
     & $kirbyPython -m pip install -r (Join-Path $kirbyRoot 'pc\requirements-director.txt')
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron preparar las dependencias de Aubar Director.' }
