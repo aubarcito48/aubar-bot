@@ -8,11 +8,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/index.js",
-    "demo": "node --env-file-if-exists=.env src/demo.js --mock",
-    "demo:api": "node --env-file-if-exists=.env src/demo.js",
-    "check:api": "node --env-file-if-exists=.env scripts/check-api.js",
-    "test": "node --test"
+    "start": "node --env-file-if-exists=.env src/index.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

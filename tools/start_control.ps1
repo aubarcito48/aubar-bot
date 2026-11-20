@@ -27,10 +27,10 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias. Revisa la conexion a internet.' }
 }
 
-& $kirbyPython (Join-Path $kirbyRoot 'tools\prepare_recognizer.py')
+& $kirbyPython (Join-Path $kirbyRoot 'tools\recognition\prepare_recognizer.py')
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el modelo local de espanol.' }
 
-& $kirbyPython (Join-Path $kirbyRoot 'tools\install_tts_model.py')
+& $kirbyPython (Join-Path $kirbyRoot 'tools\speech\install_tts_model.py')
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la voz local de Kokoro.' }
 
 # This is the interactive application requested by the user; pythonw avoids

@@ -1,11 +1,11 @@
 import { createServer } from 'node:http';
-import { readConfig } from './config.js';
-import { createPortfolioClient } from './portfolio-client.js';
-import { Conversation } from './conversation.js';
-import { openAuthStore } from './auth-store.js';
-import { createWhatsApp } from './whatsapp.js';
-import { createTechnologyCards } from './technology-cards.js';
-import { createDesktopControl, openSendLedger } from './desktop-control.js';
+import { readConfig } from './config/environment.js';
+import { createPortfolioClient } from './services/portfolio/client.js';
+import { Conversation } from './services/conversation/conversation.js';
+import { openAuthStore } from './storage/auth-store.js';
+import { createWhatsApp } from './services/whatsapp/whatsapp.js';
+import { createTechnologyCards } from './services/portfolio/technology-cards.js';
+import { createDesktopControl, openSendLedger } from './services/desktop/control.js';
 
 let auth;
 let bot;

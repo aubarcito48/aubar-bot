@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include "Display_ST7789.h"
-#include "avatar_controller.h"
-#include "portrait_player.h"
-#include "usb_control.h"
+#include "src/avatar/avatar_controller.h"
+#include "src/portrait/portrait_player.h"
+#include "src/usb/usb_control.h"
 
 // Existing USB/voice commands now drive the supplied portrait assets.
 static AvatarController controller;

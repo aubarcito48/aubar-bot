@@ -1,0 +1,1682 @@
+from pc.aubar_control.paths import PROJECT_ROOT
+from concurrent.futures import ThreadPoolExecutor, CancelledError
+import logging
+import time
+from pathlib import Path
+from queue import Empty, Queue
+from threading import Event
+from collections import deque
+import tkinter as tk
+from tkinter import ttk
+
+from ..device.protocol import DeviceError
+from ..device.session import DeviceSession, available_ports
+from ..services.audio.audio import AudioError, MicrophoneCapture, available_inputs
+from ..services.recognition.recognition import RecognitionError
+from ..services.recognition.whisper_recognition import WhisperRecognizer
+from ..models.avatar.catalog import EXPRESSIONS, ANIMATIONS
+from ..services.recognition.voice_commands import VoiceAction
+from ..services.audio.automatic_audio import AutomaticCapture
+from ..services.speech.speech import SpeechEngine, SpeechError, SpeechCancelled
+from ..services.speech.tts_assets import VOICE as KOKORO_VOICE
+from ..services.assistant.responses import confirmation_text
+from ..services.audio.playback_gate import PlaybackGate
+from ..services.assistant.reply_queue import ReplyQueue
+from ..config.settings import load_groq_config
+from ..services.assistant.groq_client import GroqService, GroqError, TEST_QUERY
+from ..services.assistant.conversation import Conversation
+from ..models.avatar.ai_avatar import AvatarCue,normalize_reply,safe_avatar_action
+from ..integrations.youtube import open_youtube
+from ..services.audio.microphone_probe import MicrophoneProbe
+from ..integrations.whatsapp import InboxPoller,parse_send,WhatsAppError,is_inbox_query
+
+BG = "#f5f7fc"
+INK = "#3e4e65"
+MUTED = "#64748b"
+PINK = "#ffc2e9"
+
+
+class AubarApp:
+    def __init__(self, root, session=None, port_provider=available_ports,
+                 capture=None, audio_provider=available_inputs, recognizer=None, automatic_capture=None, speech=None,
+                 reply_provider=confirmation_text, config_loader=load_groq_config, ai_service=None,
+                 youtube_opener=open_youtube, microphone_probe=None):
+        self.root = root
+        self.youtube_opener=youtube_opener
+        self._youtube_pending=False
+        self._youtube_cancel=Event()
+        self.microphone_probe=microphone_probe or MicrophoneProbe()
+        self._probe_recording=False
+        self._probe_timer=None
+        self._probe_playback_token=None
+        self.config_loader=config_loader
+        self.ai_service=ai_service or GroqService()
+        self.whatsapp_inbox=InboxPoller()
+        self.whatsapp_status=tk.StringVar(value='WhatsApp: control local sin configurar.')
+        self.whatsapp_read_enabled=tk.BooleanVar(value=True)
+        self._whatsapp_notices=deque(maxlen=10)
+        self._whatsapp_history=deque(maxlen=100)
+        self._ai_local_whatsapp=False
+        self._ai_whatsapp_read=False
+        self._avatar_generation=0
+        self._pending_ai_avatar=None
+        self._ai_avatar_inflight=False
+        self._ai_visual_owner=None
+        self._ai_visual_generation=0
+        self._ai_visual_connection=None
+        self.ai_avatar_message=tk.StringVar(value='El avatar acompañará la respuesta cuando la placa esté conectada.')
+        self.ai_replies=ReplyQueue()
+        self._ai_origin='probe'
+        self._ai_voice_generation=None
+        self._ai_connection_token=None
+        self._speech_is_ai=False
+        self._capture_ai_generation=0
+        self._capture_ai_voice_generation=0
+        self._capture_query_connection=None
+        self.conversation=Conversation()
+        self.ai_input=tk.StringVar()
+        self._last_ai_reply=None
+        self._ai_read_text=False
+        self.chat_voice_enabled=tk.BooleanVar(value=False)
+        self._ai_conversation_request=None
+        self._ai_future=None
+        self._ai_cancel_completion_message=None
+        self.ai_generation=0
+        self._ai_request_generation=None
+        self.ai_message=tk.StringVar(value='Podés probar la conexión con Groq cuando la configuración esté lista.')
+        self.groq_config=None
+        self.groq_config_message=tk.StringVar()
+        self.reload_groq_configuration()
+        self.session = session or DeviceSession()
+        self.port_provider = port_provider
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-usb")
+        self.events = Queue()
+        self.capture = capture or MicrophoneCapture()
+        self.automatic_capture = automatic_capture or AutomaticCapture(self.capture.backend)
+        self.speech = speech or SpeechEngine()
+        self.speech_enabled = tk.BooleanVar(value=True)
+        self.speech_volume = tk.DoubleVar(value=80)
+        self.speech_volume_label = tk.StringVar(value="80 %")
+        self.speech_message = tk.StringVar(value="Lista para probar la voz de Onyx.")
+        self.speech_voice = tk.StringVar(value=f"Voz: {KOKORO_VOICE['name']} ({KOKORO_VOICE['language']})")
+        self._speech_future = None
+        self._speech_avatar_sent = False
+        self._speech_avatar_at = 0.0
+        self._speech_plan_key = None
+        self._last_ai_performance = None
+        self._speech_stop_requested = False
+        self._speech_is_test = False
+        self.reply_provider = reply_provider
+        self.replies = ReplyQueue()
+        self._capture_reply_generation = self.replies.generation
+        self._pending_action_reply_generation = None
+        self._speech_response_token = None
+        self.playback_gate = PlaybackGate()
+        self._speech_playback_token = None
+        self._playback_was_blocked = False
+        self.auto_enabled = tk.BooleanVar(value=False)
+        self.auto_generation = 0
+        self.auto_running = False
+        self.audio_provider = audio_provider
+        self.audio_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aubar-mic")
+        self.audio_events = Queue()
+        self.audio_phase = "idle"
+        self.audio_scan_busy = False
+        self.audio_failed = False
+        self.inputs = {}
+        self.last_recording = None
+        self.recognizer = recognizer if recognizer is not None else WhisperRecognizer()
+        self.recognition_ready=not isinstance(self.recognizer,WhisperRecognizer) or self.recognizer.backend is not None
+        self.recognized_action = None
+        self.recognized_query = None
+        self.recognition_text = tk.StringVar(value="Todavía no hay una frase reconocida.")
+        self.recognition_message = tk.StringVar(value="Decí un comando o una pregunta directamente, sin decir el nombre.")
+        self.mic_value = tk.StringVar()
+        self.audio_message = tk.StringVar(value="Buscando micrófonos…")
+        self.connected = False
+        self.busy = False
+        self.closed = False
+        self.ports = {}
+        self.active_port = None
+        self.connection_token = 0
+        self.capture_connection_token = None
+        self.pending_action = None
+        self.voice_inflight = False
+        self.port_value = tk.StringVar()
+        self.banner_value = tk.StringVar(value="Buscando puertos…")
+        self.values = {key: tk.StringVar(value="—") for key in ("expression", "mode", "look")}
+        self.animation_value = tk.StringVar(value="Animación: —")
+        self.catalog_message = tk.StringVar(value="Conectá el ESP32 para elegir una expresión o una animación.")
+        self._build()
+        root.protocol("WM_DELETE_WINDOW", self.close)
+        self._events_timer = root.after(80, self._drain)
+        self._poll_timer = root.after(1500, self._poll)
+        self.refresh_ports()
+        self.refresh_microphones()
+        if not self.recognition_ready:
+            self.recognition_message.set('Preparando '+self.recognizer.label+'. Esperá a que termine para hablar.')
+            self._audio_submit('recognizer_ready',self.recognizer.prepare)
+
+    def _build(self):
+        self.root.title("Aubar Bot — Panel")
+        height = max(650, min(740, self.root.winfo_screenheight()-120))
+        self.root.geometry(f"820x{height}")
+        self.root.minsize(760, 650)
+        self.root.configure(bg=BG)
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure("TFrame", background=BG)
+        style.configure("TLabel", background=BG, foreground=INK, font=("Segoe UI", 11))
+        style.configure("Muted.TLabel", foreground=MUTED)
+        style.configure("Title.TLabel", font=("Segoe UI", 28, "bold"))
+        style.configure("Section.TLabel", font=("Segoe UI", 14, "bold"))
+        style.configure("TButton", padding=(14, 9), font=("Segoe UI", 10), foreground=INK)
+        style.configure("Compact.TButton",padding=(8,3),font=("Segoe UI",10),foreground=INK)
+        style.configure("Primary.TButton", background=PINK, foreground="#35263e", borderwidth=0)
+        style.map("Primary.TButton", background=[("active", "#f2aedc"), ("disabled", "#e8eaf0")])
+        style.configure("TCombobox", padding=8, font=("Segoe UI", 10))
+        style.configure("Value.TLabel", background="white", font=("Segoe UI", 18, "bold"))
+        style.configure("Caption.TLabel", background="white", foreground=MUTED)
+
+        main = ttk.Frame(self.root, padding=30)
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(1, weight=1)
+        header = ttk.Frame(main)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Aubar Bot", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Tu compañero de escritorio", style="Muted.TLabel").grid(row=1, column=0, sticky="w")
+        icon = tk.Canvas(header, width=120, height=78, bg=BG, highlightthickness=0)
+        icon.grid(row=0, column=1, rowspan=2, padx=(20, 0))
+        icon.create_oval(10, 37, 48, 68, fill=PINK, outline=PINK)
+        icon.create_oval(76, 37, 114, 68, fill=PINK, outline=PINK)
+        icon.create_oval(27, 3, 98, 75, fill=PINK, outline=PINK)
+        for x in (54, 72):
+            icon.create_line(x, 36, x, 51, fill=INK, width=6, capstyle=tk.ROUND)
+
+        notebook = ttk.Notebook(main)
+        notebook.grid(row=1, column=0, sticky="nsew")
+        device_tab = ttk.Frame(notebook, padding=16)
+        microphone_tab = ttk.Frame(notebook, padding=16)
+        notebook.add(device_tab, text="Dispositivo")
+        notebook.add(microphone_tab, text="Micrófono")
+        speech_tab = ttk.Frame(notebook, padding=16)
+        notebook.add(speech_tab, text="Voz")
+        self._build_speech(speech_tab)
+        catalog_tab = ttk.Frame(notebook, padding=16)
+        notebook.add(catalog_tab, text="Catálogo")
+        self._build_catalog(catalog_tab)
+        ai_tab=ttk.Frame(notebook,padding=16)
+        notebook.add(ai_tab,text="IA")
+        self._build_ai_configuration(ai_tab)
+        whatsapp_tab=ttk.Frame(notebook,padding=16)
+        notebook.add(whatsapp_tab,text="WhatsApp")
+        self._build_whatsapp(whatsapp_tab)
+        self._build_microphone(microphone_tab)
+        main = device_tab
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(7, weight=1)
+
+        connection = ttk.Frame(main)
+        connection.grid(row=1, column=0, sticky="ew")
+        connection.columnconfigure(0, weight=1)
+        ttk.Label(connection, text="Puerto USB", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        self.port_combo = ttk.Combobox(connection, textvariable=self.port_value, state="readonly")
+        self.port_combo.grid(row=1, column=0, sticky="ew", padx=(0, 10))
+        self.port_combo.bind("<<ComboboxSelected>>", lambda _: self._controls())
+        self.scan_button = ttk.Button(connection, text="Buscar puertos", command=self.refresh_ports)
+        self.scan_button.grid(row=1, column=1)
+        buttons = ttk.Frame(main)
+        buttons.grid(row=2, column=0, sticky="ew", pady=(12, 12))
+        self.connect_button = ttk.Button(buttons, text="Conectar", style="Primary.TButton", command=self.connect)
+        self.connect_button.pack(side="left", padx=(0, 8))
+        self.disconnect_button = ttk.Button(buttons, text="Desconectar", command=self.disconnect)
+        self.disconnect_button.pack(side="left")
+        self.status_button = ttk.Button(buttons, text="Consultar estado", command=self.refresh_status)
+        self.status_button.pack(side="right")
+        self.banner = tk.Label(main, textvariable=self.banner_value, bg="#e8eef8", fg=INK,
+                               anchor="w", padx=14, pady=12, font=("Segoe UI", 10), wraplength=680)
+        self.banner.grid(row=3, column=0, sticky="ew", pady=(0, 20))
+
+        ttk.Label(main, text="En la pantalla", style="Section.TLabel").grid(row=4, column=0, sticky="w", pady=(0, 8))
+        state = tk.Frame(main, bg="white", highlightbackground="#dfe5ef", highlightthickness=1)
+        state.grid(row=5, column=0, sticky="ew")
+        for column, (key, title) in enumerate((("expression", "Expresión"), ("mode", "Modo"), ("look", "Mirada"))):
+            state.columnconfigure(column, weight=1, uniform="status")
+            ttk.Label(state, text=title, style="Caption.TLabel").grid(row=0, column=column, sticky="w", padx=18, pady=(14, 3))
+            ttk.Label(state, textvariable=self.values[key], style="Value.TLabel", wraplength=200).grid(row=1, column=column, sticky="w", padx=18, pady=(0, 16))
+        ttk.Label(state, textvariable=self.animation_value, style="Caption.TLabel").grid(row=2, column=0, columnspan=3, sticky="w", padx=18, pady=(0, 12))
+
+        ttk.Label(main, text="Actividad", style="Section.TLabel").grid(row=6, column=0, sticky="w", pady=(20, 8))
+        self.activity = tk.Text(main, height=5, state="disabled", bg="white", fg=INK,
+                                font=("Segoe UI", 10), relief="flat", padx=12, pady=10,
+                                wrap="word", highlightthickness=1, highlightbackground="#dfe5ef")
+        self.activity.grid(row=7, column=0, sticky="nsew")
+        ttk.Label(main, text="Cerrá el monitor serie de Arduino antes de conectar.", style="Muted.TLabel").grid(row=8, column=0, sticky="w", pady=(12, 0))
+        self._controls()
+
+    def reload_groq_configuration(self):
+        self._invalidate_ai_turn()
+        self.conversation.reset()
+        self._clear_groq_cache()
+        self._last_ai_reply=None
+        self._last_ai_performance=None
+        state=self.config_loader()
+        self.groq_config=state.config
+        self.whatsapp_inbox.configure(self.groq_config)
+        self._whatsapp_notices.clear()
+        self._whatsapp_history.clear()
+        self.whatsapp_status.set('Conectando al puente local de WhatsApp…' if self.groq_config and self.groq_config.whatsapp_control_url
+            else 'WhatsApp: control local sin configurar.')
+        if hasattr(self,'whatsapp_messages'):
+            self._render_whatsapp()
+        self.groq_config_message.set(state.message)
+        if hasattr(self,'ai_response'):
+            self._show_ai_response('')
+            self.ai_input.set('')
+            self._cancel_status('Configuración recargada y conversación reiniciada.')
+            self._ai_controls()
+
+    def _build_ai_configuration(self,panel):
+        panel.columnconfigure(0,weight=1)
+        ttk.Label(panel,text="La conversación de Aubar",style="Section.TLabel").grid(
+            row=0,column=0,sticky="w",pady=(0,12))
+        self.groq_config_status=ttk.Label(panel,textvariable=self.groq_config_message,
+            wraplength=600)
+        self.groq_config_status.grid(row=1,column=0,sticky="ew",pady=(0,12))
+        buttons=ttk.Frame(panel)
+        buttons.grid(row=2,column=0,sticky="ew",pady=(0,12))
+        ttk.Button(buttons,text="Recargar configuración",command=self.reload_groq_configuration).pack(side="left",padx=(0,10))
+        self.ai_test_button=ttk.Button(buttons,text="Probar conexión",style="Primary.TButton",command=self.test_groq)
+        self.ai_test_button.pack(side="left")
+        ttk.Button(buttons,text="Nueva conversación",command=self.new_conversation).pack(side="left",padx=(10,0))
+        ttk.Label(panel,text="Guardá tu clave en GROQ_API_KEY dentro de .env y recargá. "
+            "La clave no se muestra en el panel.",style="Muted.TLabel",wraplength=600).grid(
+            row=3,column=0,sticky="ew",pady=(0,12))
+        voice_controls=ttk.Frame(panel)
+        voice_controls.grid(row=4,column=0,sticky="ew",pady=(0,10))
+        self.ai_voice_check=ttk.Checkbutton(voice_controls,text="Activar voz en el chat",
+            variable=self.chat_voice_enabled,command=self.toggle_chat_voice)
+        self.ai_voice_check.grid(row=0,column=0,sticky="w",padx=(0,12))
+        self.ai_read_button=ttk.Button(voice_controls,text="Escuchar respuesta",command=self.read_ai_response)
+        self.ai_read_button.grid(row=0,column=1,padx=(0,8))
+        self.ai_voice_stop_button=ttk.Button(voice_controls,text="Detener voz",command=self.stop_speech)
+        self.ai_voice_stop_button.grid(row=0,column=2)
+        ttk.Label(voice_controls,textvariable=self.speech_voice,style="Muted.TLabel").grid(
+            row=1,column=0,columnspan=3,sticky="w",pady=(5,0))
+        question=ttk.Frame(panel)
+        question.grid(row=5,column=0,sticky="ew",pady=(0,8))
+        question.columnconfigure(1,weight=1)
+        ttk.Label(question,text="Mensaje").grid(row=0,column=0,padx=(0,8))
+        self.ai_entry=ttk.Entry(question,textvariable=self.ai_input,font=("Segoe UI",11))
+        self.ai_entry.grid(row=0,column=1,sticky="ew",padx=(0,8))
+        self.ai_entry.bind('<Return>',lambda event:self.send_ai_message())
+        self.ai_send_button=ttk.Button(question,text="Enviar",command=self.send_ai_message)
+        self.ai_send_button.grid(row=0,column=2)
+        self.ai_cancel_button=ttk.Button(question,text="Cancelar",command=self.cancel_ai_query)
+        self.ai_cancel_button.grid(row=0,column=3,padx=(8,0))
+        response_frame=ttk.Frame(panel)
+        response_frame.grid(row=6,column=0,sticky="nsew")
+        response_frame.rowconfigure(0,weight=1);response_frame.columnconfigure(0,weight=1)
+        self.ai_response=tk.Text(response_frame,height=4,state="disabled",bg="white",fg=INK,
+            font=("Segoe UI",11),wrap="word",relief="flat",padx=12,pady=10)
+        self.ai_response.grid(row=0,column=0,sticky="nsew")
+        scrollbar=ttk.Scrollbar(response_frame,command=self.ai_response.yview)
+        scrollbar.grid(row=0,column=1,sticky="ns")
+        self.ai_response.configure(yscrollcommand=scrollbar.set)
+        panel.rowconfigure(6,weight=1)
+        ttk.Label(panel,textvariable=self.ai_message,wraplength=600).grid(
+            row=7,column=0,sticky="ew",pady=(10,6))
+        ttk.Label(panel,textvariable=self.ai_avatar_message,style="Muted.TLabel",wraplength=600).grid(
+            row=8,column=0,sticky="ew")
+        self.groq_usage_message=tk.StringVar(value='Groq: sin consultas en esta sesión.')
+        ttk.Label(panel,textvariable=self.groq_usage_message,style="Muted.TLabel",wraplength=600).grid(
+            row=9,column=0,sticky="ew",pady=(6,0))
+        self.groq_sources_message=tk.StringVar(value='')
+        ttk.Label(panel,textvariable=self.groq_sources_message,style='Muted.TLabel',wraplength=600).grid(
+            row=10,column=0,sticky='ew')
+        self._ai_controls()
+        self._speech_controls()
+
+    def toggle_chat_voice(self):
+        if self.chat_voice_enabled.get():
+            self.speech_enabled.set(True)
+            self.toggle_speech()
+        else:
+            # Do not replay a response that arrives after muting and re-enabling.
+            if self._ai_origin=='text':
+                self.ai_replies.cancel()
+                if self._speech_is_ai:
+                    self.stop_speech()
+        self._speech_controls()
+
+    def read_ai_response(self):
+        if self.closed or not self._last_ai_reply or self._ai_turn_busy():
+            return
+        performance=self._last_ai_performance
+        if performance:
+            self._queue_ai_visual(performance.action,'answer')
+        if self.speak_text(self._last_ai_reply,performance=performance):
+            self._speech_is_ai=True
+        self._ai_controls()
+        self._speech_controls()
+
+    def _ai_controls(self):
+        active=self._ai_turn_busy()
+        self.ai_test_button.configure(state="normal" if self.groq_config is not None and not active else "disabled")
+        self.ai_send_button.configure(state="normal" if self.groq_config is not None and not active else "disabled")
+        self.ai_entry.configure(state="disabled" if active else "normal")
+        cancellable=active or self.audio_phase in ('recognizing','auto_recognizing')
+        self.ai_cancel_button.configure(state='normal' if cancellable and self._ai_cancel_completion_message is None else 'disabled')
+        if hasattr(self,'ai_read_button'):
+            self._speech_controls()
+
+    def _ai_turn_busy(self):
+        return (self._ai_future is not None or self.ai_service.busy or self.ai_replies.pending is not None
+                or self._speech_is_ai and self._speech_future is not None
+                or self._pending_ai_avatar is not None or self._ai_avatar_inflight)
+
+    def _invalidate_ai_turn(self,restore_visual=True):
+        self._youtube_cancel.set()
+        self.ai_generation+=1
+        self.conversation.invalidate_pending()
+        self._ai_conversation_request=None
+        cancel=getattr(self.ai_service,'cancel',None)
+        if callable(cancel):
+            cancel()
+        self._reset_ai_visual(restore=restore_visual)
+        self._discard_ai_speech()
+
+    def _cancel_status(self,message):
+        if self._ai_local_whatsapp and self._ai_future is not None and 'Puede haberse transmitido' not in message:
+            message+=' Puede haberse transmitido: revisá WhatsApp antes de repetirlo.'
+        self._ai_cancel_completion_message=message if self._ai_future is not None else None
+        self.ai_message.set('Cancelando consulta…' if self._ai_future is not None and not self._ai_future.done() else message)
+
+    def cancel_ai_query(self):
+        if self.closed:
+            return
+        self._invalidate_ai_turn()
+        self.recognized_query=None
+        self._show_ai_response(self.conversation.transcript)
+        self._cancel_status('Se canceló la espera del envío. Puede haberse transmitido: revisá WhatsApp antes de repetirlo.'
+            if self._ai_local_whatsapp else 'Consulta cancelada. El contexto completado se conserva.')
+        self.recognition_message.set('Consulta cancelada.')
+        self._ai_controls()
+        self._audio_controls()
+
+    def new_conversation(self):
+        self._invalidate_ai_turn()
+        self.conversation.reset()
+        self._clear_groq_cache()
+        self._last_ai_reply=None
+        self._last_ai_performance=None
+        self.ai_input.set('')
+        self._show_ai_response('')
+        self._cancel_status('Conversación nueva. Aubar no conserva el contexto anterior.')
+        self._ai_controls()
+
+    def _clear_groq_cache(self):
+        clear=getattr(self.ai_service,'clear_cache',None)
+        if callable(clear):
+            clear()
+
+    def _refresh_groq_usage(self):
+        summary=getattr(self.ai_service,'usage_summary',None)
+        if not callable(summary) or not hasattr(self,'groq_usage_message'):
+            return
+        usage=summary()
+        if usage is None:
+            return
+        self.groq_usage_message.set(
+            f"Groq · sesión: {usage['calls']} intentos · {usage['total_tokens']} tokens informados "
+            f"({usage['usage_responses']} respuestas con uso) · {usage['cache_hits']} reutilizaciones locales.")
+
+    def send_ai_message(self):
+        self._start_ai_request(self.ai_input.get())
+
+    def _start_ai_request(self,text,*,origin='text',speech_generation=None,connection=None):
+        if self.closed:
+            return False
+        if self.groq_config is None or self._ai_turn_busy():
+            self.ai_message.set(self.groq_config_message.get() if self.groq_config is None else
+                                'Hay una respuesta en curso. Esperá a que termine o pulsá Cancelar.')
+            return False
+        text=text.replace(self.groq_config.api_key,'[credencial oculta]')
+        self._ai_whatsapp_read=is_inbox_query(text)
+        try:
+            self._ai_local_whatsapp=parse_send(text) is not None
+        except WhatsAppError:
+            self._ai_local_whatsapp=True
+        try:
+            request=self.conversation.prepare(text)
+        except ValueError as error:
+            self.ai_message.set(str(error))
+            return False
+        self._ai_request_generation=self.ai_generation
+        self._ai_cancel_completion_message=None
+        self._ai_conversation_request=request
+        self._ai_origin=origin
+        self._ai_voice_generation=self.ai_replies.generation if speech_generation is None else speech_generation
+        self._ai_read_text=origin=='text' and self.chat_voice_enabled.get() and self.speech_enabled.get()
+        self._ai_connection_token=connection
+        self._ai_visual_generation=self._avatar_generation
+        self._ai_visual_connection=self.connection_token
+        if origin=='voice':
+            self.automatic_capture.pause()
+        try:
+            self._ai_future=self.ai_service.submit(self.groq_config,request)
+        except GroqError as error:
+            self._ai_conversation_request=None
+            self.ai_message.set(str(error))
+        else:
+            self.ai_message.set('Aubar está preparando una respuesta…')
+            self._queue_ai_visual(VoiceAction('ANIMATION','thinking','Pensar'),'thinking')
+        self._ai_controls()
+        self._audio_controls()
+        return self._ai_future is not None
+
+    def _send_voice_query(self,text):
+        if (self._capture_ai_generation!=self.ai_generation
+            or self._capture_query_connection!=self.connection_token):
+            self.recognition_message.set('Consulta descartada: el estado cambió durante el reconocimiento.')
+            return
+        sent=self._start_ai_request(text,origin='voice',
+            speech_generation=self._capture_ai_voice_generation,connection=self.connection_token)
+        self.recognition_message.set('Consulta enviada. Aubar está preparando la respuesta…' if sent else self.ai_message.get())
+
+    def _conversation_blocks_microphone(self):
+        return ((self._ai_future is not None and self._ai_origin!='probe') or self.ai_replies.pending is not None
+                or self._pending_ai_avatar is not None or self._ai_avatar_inflight)
+
+    def _discard_ai_speech(self):
+        self.ai_replies.cancel()
+        if self._speech_is_ai:
+            self.stop_speech()
+
+    def _drain_ai_reply(self):
+        reply=self.ai_replies.peek(self.ai_generation)
+        if reply is None:
+            return
+        if self.closed or not self.speech_enabled.get():
+            self.ai_replies.discard()
+            return
+        if (self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy
+            or self._pending_ai_avatar is not None or self._ai_avatar_inflight):
+            return
+        self.ai_replies.take(self.ai_generation)
+        if self.speak_text(reply.text,performance=reply.performance):
+            self._speech_is_ai=True
+            self.recognition_message.set('Aubar está hablando. La respuesta completa está en IA.')
+        else:
+            self.recognition_message.set('Respuesta disponible en IA. No se pudo iniciar la voz.')
+
+    def _queue_ai_visual(self,action,phase):
+        if not self.connected or getattr(self.session,'version',None) not in (2,3,4):
+            self.ai_avatar_message.set('Avatar sin conexión compatible. La respuesta sigue disponible en IA.')
+            return False
+        if (self._ai_visual_connection!=self.connection_token
+            or self._ai_visual_generation!=self._avatar_generation):
+            self.ai_avatar_message.set('Se conserva el estado actual del avatar.')
+            return False
+        action,_=safe_avatar_action(action.command,action.argument)
+        if action.command=='ANIMATION' and self.session.version==2:
+            if phase=='thinking':
+                return False
+            action,_=safe_avatar_action('EXPRESSION','neutral')
+        cue=AvatarCue(self.connection_token,self.ai_generation,self._avatar_generation,phase,action)
+        self._pending_ai_avatar=cue
+        self._ai_visual_owner=cue
+        self.ai_avatar_message.set('Avatar pendiente: '+action.label+'.')
+        return True
+
+    def _reset_ai_visual(self,restore=True):
+        owner=self._ai_visual_owner
+        self._pending_ai_avatar=None
+        self._ai_visual_owner=None
+        if (restore and owner is not None and not getattr(self,'closed',False)
+            and getattr(self,'connected',False) and owner.connection==self.connection_token
+            and owner.control==self._avatar_generation):
+            action,_=safe_avatar_action('EXPRESSION','neutral')
+            cue=AvatarCue(self.connection_token,self.ai_generation,self._avatar_generation,'reset',action)
+            self._pending_ai_avatar=cue
+            self._ai_visual_owner=cue
+
+    def _take_manual_avatar(self):
+        self._avatar_generation+=1
+        self._pending_ai_avatar=None
+        self._ai_visual_owner=None
+        self.ai_avatar_message.set('Avatar bajo control manual.')
+
+    def _dispatch_ai_avatar(self):
+        cue=self._pending_ai_avatar
+        if cue is None or self.closed or self.busy:
+            return
+        self._pending_ai_avatar=None
+        if (not self.connected or cue.connection!=self.connection_token
+            or cue.conversation!=self.ai_generation or cue.control!=self._avatar_generation):
+            return
+        self._ai_avatar_inflight=True
+        self._submit('ai_avatar',lambda:(cue,self.session.apply_action(cue.action)))
+
+    def _show_ai_response(self,text):
+        self.ai_response.configure(state='normal')
+        self.ai_response.delete('1.0','end')
+        self.ai_response.insert('1.0',text)
+        self.ai_response.configure(state='disabled')
+        self.ai_response.see('end')
+
+    def test_groq(self):
+        if self.closed or self.groq_config is None or self._ai_turn_busy():
+            return
+        self._show_ai_response(self.conversation.transcript)
+        self._ai_conversation_request=None
+        self._ai_origin='probe'
+        self._ai_cancel_completion_message=None
+        self._ai_request_generation=self.ai_generation
+        try:
+            self._ai_future=self.ai_service.submit(self.groq_config,TEST_QUERY)
+        except GroqError as error:
+            self.ai_message.set(str(error))
+        else:
+            self.ai_message.set('Consultando Groq… El panel sigue disponible.')
+        self._ai_controls()
+
+    def _drain_ai(self):
+        future=self._ai_future
+        if future is None or not future.done():
+            return
+        self._ai_future=None
+        request=self._ai_conversation_request
+        origin=self._ai_origin
+        voice_generation=self._ai_voice_generation
+        self._ai_conversation_request=None
+        stale=(self._ai_request_generation!=self.ai_generation or
+               origin=='voice' and self._ai_connection_token!=self.connection_token)
+        failed=False
+        try:
+            result=future.result()
+            reply=normalize_reply(result) if request is not None else None
+            text=reply.text if reply is not None else result
+        except (CancelledError,GroqError) as error:
+            failed=True
+            if not stale:
+                self.ai_message.set(str(error) if isinstance(error,GroqError) else 'La prueba fue cancelada.')
+        except Exception:
+            failed=True
+            if not stale:
+                self.ai_message.set('No se pudo completar la prueba de Groq. Podés intentar nuevamente.')
+        else:
+            if not stale:
+                if request is not None:
+                    local_whatsapp=self._ai_local_whatsapp or self._ai_whatsapp_read
+                    if local_whatsapp:
+                        # Never put private WhatsApp content in the next Groq
+                        # request's conversational history.
+                        self.conversation.invalidate_pending()
+                        transcript=self.conversation.transcript
+                        self._show_ai_response((transcript+'\n\n' if transcript else '')+'WhatsApp (local): '+text)
+                        self._whatsapp_history.append('Consulta local:\n'+request.question+'\n\n'+text)
+                        self._render_whatsapp()
+                    else:
+                        if not self.conversation.commit(request,text):
+                            self._ai_controls()
+                            return
+                        self._show_ai_response(self.conversation.transcript)
+                    self._last_ai_reply=text
+                    self._last_ai_performance=reply
+                    if origin=='text':
+                        self.ai_input.set('')
+                    self.ai_message.set(f'Respuesta recibida. Contexto: {self.conversation.turn_count} intercambios.')
+                    if self._ai_local_whatsapp or self._ai_whatsapp_read:
+                        self.ai_message.set('Resultado del comando local de WhatsApp. No se consultó Groq.')
+                    elif self.groq_config and self.groq_config.director=='local':
+                        self.ai_message.set(f'Respuesta recibida. Aubar Director local (piloto) · {self.conversation.turn_count} intercambios.')
+                    if reply.fallback:
+                        self.ai_message.set('Respuesta recibida. No se pudo preparar la interpretación; se usa un gesto neutral.')
+                    self._queue_ai_visual(reply.action,'answer')
+                    if origin=='voice':
+                        self.recognition_message.set('Respuesta disponible en IA.')
+                    if (origin=='voice' or origin=='text' and self._ai_read_text and self.chat_voice_enabled.get()):
+                        if self.speech_enabled.get() and voice_generation==self.ai_replies.generation:
+                            self.ai_replies.put(text,self.ai_generation,voice_generation,performance=reply)
+                else:
+                    transcript=self.conversation.transcript
+                    self._show_ai_response(transcript+'\n\nPrueba de conexión: '+text if transcript else text)
+                    self.ai_message.set('Conexión comprobada: Groq respondió usando el modelo configurado.')
+                if request is None:
+                    self.groq_config_message.set('Configuración verificada con Groq en esta prueba.')
+        if origin=='voice' and not stale and failed:
+            self.recognition_message.set(self.ai_message.get())
+        if failed and not stale:
+            self._reset_ai_visual()
+        self._refresh_groq_usage()
+        if self._ai_cancel_completion_message is not None:
+            self.ai_message.set(self._ai_cancel_completion_message)
+            self._ai_cancel_completion_message=None
+        self._ai_controls()
+        self._audio_controls()
+
+    def _build_whatsapp(self,panel):
+        panel.columnconfigure(0,weight=1)
+        panel.rowconfigure(3,weight=1)
+        ttk.Label(panel,text='Mensajes de WhatsApp',style='Section.TLabel').grid(row=0,column=0,sticky='w')
+        ttk.Label(panel,textvariable=self.whatsapp_status,wraplength=650).grid(row=1,column=0,sticky='ew',pady=(10,8))
+        ttk.Checkbutton(panel,text='Leer las notificaciones con Onyx',variable=self.whatsapp_read_enabled,
+            command=self._clear_whatsapp_audio).grid(row=2,column=0,sticky='w',pady=(0,10))
+        self.whatsapp_messages=tk.Text(panel,height=12,state='disabled',wrap='word',bg='white',fg=INK,
+            font=('Segoe UI',11),relief='flat',padx=12,pady=12)
+        self.whatsapp_messages.grid(row=3,column=0,sticky='nsew')
+        ttk.Label(panel,text='Para enviar, usá IA o tu voz: enviá un WhatsApp a +549XXXXXXXXXX: Hola. '
+            'Solo se admiten los contactos de prueba configurados en el bot. '
+            'Para consultar: mostrá mis mensajes de WhatsApp.',
+            style='Muted.TLabel',wraplength=650).grid(row=4,column=0,sticky='ew',pady=(10,0))
+
+    def _clear_whatsapp_audio(self):
+        self._whatsapp_notices.clear()
+
+    def _render_whatsapp(self):
+        self.whatsapp_messages.configure(state='normal')
+        self.whatsapp_messages.delete('1.0','end')
+        self.whatsapp_messages.insert('end','\n\n'.join(self._whatsapp_history))
+        self.whatsapp_messages.configure(state='disabled')
+        self.whatsapp_messages.see('end')
+
+    def _drain_whatsapp(self):
+        update=self.whatsapp_inbox.tick()
+        if update:
+            status,events,missed=update
+            self.whatsapp_status.set('Puente local conectado. Esperando mensajes nuevos.' if status=='connected'
+                else 'No pude consultar el puente local. Revisá que el bot esté iniciado y el token coincida.')
+            if missed:
+                self.whatsapp_status.set('El puente se reinició o hubo mensajes fuera de la ventana de consulta. Revisá WhatsApp.')
+            for event in events:
+                name=event['name'] or 'el número terminado en '+event['sender'][-4:]
+                self._whatsapp_history.append(name+' ('+event['sender']+'):\n'+event['text'])
+                if self.whatsapp_read_enabled.get() and self.speech_enabled.get():
+                    text='Te llegó un mensaje de '+name+': '+event['text']
+                    if len(text)>1700: text=text[:1650]+'. El texto completo está en la pestaña WhatsApp.'
+                    self._whatsapp_notices.append((time.perf_counter(),text))
+            if events:
+                self._render_whatsapp()
+        while self._whatsapp_notices and time.perf_counter()-self._whatsapp_notices[0][0]>60:
+            self._whatsapp_notices.popleft()
+        if (self._whatsapp_notices and self.whatsapp_read_enabled.get() and self.speech_enabled.get()
+            and not self._ai_turn_busy() and self.audio_phase=='idle' and not self.voice_inflight
+            and self._speech_future is None and not self.speech.busy and self.replies.pending is None):
+            _,text=self._whatsapp_notices.popleft()
+            if self.speak_text(text):
+                self._speech_is_ai=True
+
+    def _build_speech(self, panel):
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(4, weight=1)
+        heading = ttk.Frame(panel)
+        heading.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        heading.columnconfigure(0, weight=1)
+        ttk.Label(heading, text="La voz de Aubar", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(heading, textvariable=self.speech_voice, style="Muted.TLabel",
+                  wraplength=540).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        icon=tk.Canvas(heading,width=70,height=60,bg=BG,highlightthickness=0)
+        icon.grid(row=0,column=1,rowspan=2,padx=(16,0))
+        icon.create_oval(3,3,57,57,fill=PINK,outline=PINK)
+        icon.create_polygon(15,25,23,25,33,17,33,43,23,35,15,35,fill=INK)
+        icon.create_arc(28,18,48,42,start=-60,extent=120,style="arc",outline=INK,width=3)
+        self.speech_check=ttk.Checkbutton(panel,text="Activar voz",variable=self.speech_enabled,
+                                         command=self.toggle_speech)
+        self.speech_check.grid(row=1,column=0,sticky="w",pady=(0,10))
+        volume=ttk.Frame(panel)
+        volume.grid(row=2,column=0,sticky="ew",pady=(0,12))
+        volume.columnconfigure(0,weight=1)
+        ttk.Label(volume,text="Volumen").grid(row=0,column=0,sticky="w")
+        ttk.Label(volume,textvariable=self.speech_volume_label).grid(row=0,column=1,sticky="e")
+        self.speech_volume_scale=ttk.Scale(volume,from_=0,to=100,variable=self.speech_volume,
+                                           command=self._speech_volume_changed)
+        self.speech_volume_scale.grid(row=1,column=0,columnspan=2,sticky="ew",pady=(8,0))
+        ttk.Label(panel,text="Texto para probar").grid(row=3,column=0,sticky="w",pady=(0,8))
+        self.speech_text=tk.Text(panel,height=3,wrap="word",font=("Segoe UI",12),fg=INK,
+                                 bg="white",padx=12,pady=10,relief="flat",
+                                 highlightthickness=1,highlightbackground="#dfe5ef")
+        self.speech_text.insert("1.0","Hola, soy Aubar. Esta es mi voz en español. Podés ajustar el volumen y detener esta prueba desde el panel.")
+        self.speech_text.grid(row=4,column=0,sticky="nsew")
+        buttons=ttk.Frame(panel)
+        buttons.grid(row=5,column=0,sticky="ew",pady=(10,10))
+        self.speech_test_button=ttk.Button(buttons,text="Probar voz",style="Primary.TButton",
+                                          command=self.test_speech)
+        self.speech_test_button.pack(side="left",padx=(0,10))
+        self.speech_stop_button=ttk.Button(buttons,text="Detener",command=self.stop_speech)
+        self.speech_stop_button.pack(side="left")
+        self.speech_status=tk.Label(panel,textvariable=self.speech_message,bg="#e8eef8",fg=INK,
+                                    anchor="w",justify="left",font=("Segoe UI",11),
+                                    padx=14,pady=8,wraplength=650)
+        self.speech_status.grid(row=6,column=0,sticky="ew")
+        self.speech_hint=ttk.Label(panel,text="La prueba usa la salida de audio predeterminada de Windows.",
+                                   style="Muted.TLabel",wraplength=650)
+        self.speech_hint.grid(row=7,column=0,sticky="w",pady=(8,0))
+        self._speech_controls()
+
+    def _speech_volume_changed(self, value=None):
+        self.speech_volume_label.set(f"{round(self.speech_volume.get())} %")
+
+    def _speech_controls(self):
+        active=self._speech_future is not None or self.speech.busy
+        pending=self._pending_reply is not None or self.ai_replies.pending is not None
+        ai_waiting=(self._ai_future is not None and (self._ai_origin=='voice' or self._ai_read_text))
+        enabled=self.speech_enabled.get()
+        ai_voice_waiting=ai_waiting and self._ai_voice_generation==self.ai_replies.generation and enabled
+        microphone_busy=self.audio_phase!='idle'
+        self.speech_test_button.configure(state="normal" if enabled and not active and not pending and not microphone_busy and not ai_waiting else "disabled")
+        self.speech_stop_button.configure(state="normal" if (active or pending or ai_voice_waiting) and not self._speech_stop_requested else "disabled")
+        if hasattr(self,'ai_read_button'):
+            can_read=(self._last_ai_reply is not None and enabled and not active and not pending
+                      and not microphone_busy and not self._ai_turn_busy())
+            self.ai_read_button.configure(state='normal' if can_read else 'disabled')
+            self.ai_voice_stop_button.configure(state='normal' if (active or pending or ai_voice_waiting)
+                                                and not self._speech_stop_requested else 'disabled')
+        self.speech_volume_scale.configure(state="normal" if enabled and not active else "disabled")
+        self.speech_text.configure(state="normal" if enabled and not active else "disabled")
+        if ai_waiting:
+            self.speech_hint.configure(text="Aubar está preparando una respuesta. Detener descarta su lectura en voz alta.")
+        elif pending:
+            self.speech_hint.configure(text="Hay una respuesta pendiente. Se conserva solo la más reciente, por hasta 15 segundos.")
+        elif microphone_busy:
+            self.speech_hint.configure(text="Terminá la captura o el reconocimiento para probar la voz.")
+        else:
+            self.speech_hint.configure(text="El micrófono se pausa al hablar Aubar y vuelve a escuchar si la escucha automática sigue activada.")
+
+    def _speech_message(self, text, error=False):
+        self.speech_message.set(text)
+        self.speech_status.configure(bg="#fbe8ed" if error else "#e8eef8",fg="#942b45" if error else INK)
+
+    def test_speech(self):
+        if not self.closed:
+            self.speak_text(self.speech_text.get("1.0","end-1c"),is_test=True)
+
+    def speak_text(self, text, *, is_test=False, performance=None):
+        if self.closed or not self.speech_enabled.get() or self._speech_future is not None or self.speech.busy:
+            return False
+        if self.audio_phase!='idle':
+            self._speech_message("Terminá la captura o el reconocimiento antes de probar la voz.")
+            return False
+        self._speech_playback_token=self.playback_gate.begin()
+        self.automatic_capture.pause()
+        try:
+            options={'volume':round(self.speech_volume.get())}
+            if performance and performance.segments:
+                options['performance']=performance.segments
+            self._speech_plan_key=None
+            self._speech_future=self.speech.speak(text,**options)
+        except SpeechError as error:
+            self.playback_gate.finish(self._speech_playback_token)
+            self._speech_playback_token=None
+            self._speech_message(str(error),error=True)
+            self._audio_controls()
+            return False
+        self._speech_is_test=is_test
+        self._speech_is_ai=False
+        self._speech_stop_requested=False
+        preview=' '.join(text.split())
+        if len(preview)>160:
+            preview=preview[:157]+'…'
+        self._speech_message("Hablando…" if is_test else "Hablando: "+preview)
+        self._audio_controls()
+        return True
+
+    def stop_speech(self):
+        self._whatsapp_notices.clear()
+        had_pending=(self._pending_reply is not None or self.ai_replies.pending is not None
+                     or self._ai_future is not None and (self._ai_origin=='voice' or self._ai_read_text))
+        self.replies.cancel()
+        self.ai_replies.cancel()
+        if self.closed or not self.speech.busy and self._speech_future is None:
+            if not self.closed and had_pending:
+                self._speech_message("Respuesta pendiente descartada.")
+                self._speech_controls()
+            return
+        self._speech_stop_requested=True
+        self.speech.stop()
+        self._speech_message("Deteniendo la voz…")
+        self._speech_controls()
+
+    def toggle_speech(self):
+        if not self.speech_enabled.get():
+            self.stop_speech()
+            if self._speech_future is None and not self.speech.busy:
+                self._speech_message("Voz desactivada.")
+        elif self._speech_future is None:
+            self._speech_message("Lista para probar la voz de Onyx.")
+        self._speech_controls()
+
+    def _drain_speech(self):
+        future=self._speech_future
+        if future is None or not future.done():
+            return
+        self._speech_future=None
+        try:
+            voice=future.result()
+        except (CancelledError,SpeechCancelled):
+            self.replies.discard()
+            self._speech_message("Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
+        except Exception as error:
+            self.replies.discard()
+            if self._speech_stop_requested:
+                self._speech_message("Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
+            else:
+                if not isinstance(error,SpeechError):
+                    logging.exception("Speech playback failed")
+                self._speech_message(str(error) if isinstance(error,SpeechError) else
+                                     "No se pudo reproducir la voz. Revisá la salida de audio.",error=True)
+        else:
+            self.speech_voice.set(f"Voz: {voice.name} ({voice.language})")
+            self._speech_message(("Prueba de voz finalizada." if self._speech_is_test else "Reproducción finalizada.") if not self._speech_stop_requested else
+                                 "Voz desactivada." if not self.speech_enabled.get() else "Reproducción detenida.")
+        self._speech_stop_requested=False
+        self._speech_response_token=None
+        if self._speech_is_ai:
+            self.recognition_message.set(self.speech_message.get()+' Respuesta disponible en IA.')
+        self._speech_is_ai=False
+        self.playback_gate.finish(self._speech_playback_token)
+        self._speech_playback_token=None
+        self._audio_controls()
+
+    def _microphone_blocked(self):
+        return self._youtube_pending or self.playback_gate.blocked or self._speech_future is not None or self.speech.busy or self._conversation_blocks_microphone()
+
+    def _refresh_playback_gate(self):
+        blocked=self._microphone_blocked()
+        if blocked!=self._playback_was_blocked:
+            self._playback_was_blocked=blocked
+            self._audio_controls()
+
+    @property
+    def _pending_reply(self):
+        return self.replies.pending
+
+    def _queue_confirmed_reply(self, action, token, generation=None):
+        if generation is None:
+            generation=self.replies.generation
+        if self.closed or not self.speech_enabled.get() or not self.connected or token!=self.connection_token or generation!=self.replies.generation:
+            return
+        self.replies.discard()
+        try:
+            text=self.reply_provider(action)
+        except Exception:
+            logging.exception("Could not build confirmed speech response")
+            self._speech_message("La acción se confirmó, pero no se pudo preparar su respuesta hablada.",error=True)
+            return
+        if isinstance(text,str) and text.strip():
+            self.replies.put(text,token,generation)
+
+    def _drain_reply(self):
+        if self._pending_reply is None:
+            return
+        if self.closed or not self.speech_enabled.get() or not self.connected:
+            self.replies.discard()
+            return
+        reply=self.replies.peek(self.connection_token)
+        if reply is None:
+            return
+        if self.audio_phase!='idle' or self._speech_future is not None or self.speech.busy:
+            return
+        self.replies.take(self.connection_token)
+        if self.speak_text(reply.text):
+            self._speech_response_token=reply.connection
+            self._log('Aubar: '+reply.text)
+
+    def _build_catalog(self, panel):
+        panel.columnconfigure(0, weight=1)
+        ttk.Label(panel, text="El avatar completo", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(panel, text="28 expresiones · 23 animaciones", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 20))
+        self.catalog_buttons = []
+        self.catalog_choices = {}
+        for row, (kind, title, catalog) in enumerate((
+            ('EXPRESSION', 'Expresión fija', EXPRESSIONS),
+            ('ANIMATION', 'Animación en bucle', ANIMATIONS))):
+            base=2+row*3
+            ttk.Label(panel, text=title).grid(row=base, column=0, sticky="w", pady=(0, 6))
+            selected=tk.StringVar(value=next(iter(catalog.values())))
+            choices={label: identifier for identifier, label in catalog.items()}
+            self.catalog_choices[kind]=(selected, choices)
+            ttk.Combobox(panel, textvariable=selected, values=list(choices), state="readonly").grid(row=base+1, column=0, sticky="ew", padx=(0, 12))
+            button=ttk.Button(panel, text="Mostrar" if row==0 else "Reproducir",
+                command=lambda k=kind: self.apply_catalog(k), style="Primary.TButton")
+            button.grid(row=base+1, column=1, pady=(0, 20))
+            self.catalog_buttons.append(button)
+        demo=ttk.Button(panel, text="Recorrer todas las animaciones", command=lambda: self.apply_catalog('MODE'))
+        demo.grid(row=8, column=0, sticky="w", pady=(4, 16))
+        self.catalog_buttons.append(demo)
+        ttk.Label(panel, textvariable=self.catalog_message, wraplength=650).grid(row=9, column=0, columnspan=2, sticky="w")
+        ttk.Label(panel, text="Voz: «pensar», «reír», «celebrar», «dormir»…\n"
+                  "También: «enojado derecha» o «celebrar izquierda».\n"
+                  "Para una pose fija: «expresión tímido» o «expresión cejas enojadas».\n"
+                  "BOOT adelanta la animación; en una expresión fija, pasa a la siguiente.",
+                  style="Muted.TLabel", wraplength=650).grid(row=10, column=0, columnspan=2, sticky="w", pady=(20, 0))
+
+    def apply_catalog(self, kind):
+        if self.closed or self.busy or not self.connected or self.audio_phase!='idle':
+            return
+        if kind=='MODE':
+            action=VoiceAction('MODE', 'auto', 'Todas las animaciones')
+        else:
+            selected, choices=self.catalog_choices[kind]
+            identifier=choices.get(selected.get())
+            if identifier is None:
+                return
+            action=VoiceAction(kind, identifier, selected.get())
+        token=self.connection_token
+        self._take_manual_avatar()
+        generation=self.replies.generation
+        self.catalog_message.set('Enviando al ESP32…')
+        self._submit('catalog', lambda: (token, action, self.session.apply_action(action),generation))
+
+    def _build_microphone(self, panel):
+        panel.columnconfigure(0, weight=1)
+        ttk.Label(panel, text="Elegí tu micrófono", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 12))
+        self.probe_button=ttk.Button(panel,text='Probar micrófono',command=self.test_microphone,style='Compact.TButton')
+        self.probe_button.grid(row=0,column=1,sticky='e',pady=(0,12))
+        self.mic_combo = ttk.Combobox(panel, textvariable=self.mic_value, state="readonly")
+        self.mic_combo.grid(row=1, column=0, sticky="ew", padx=(0, 10))
+        self.mic_combo.bind("<<ComboboxSelected>>", lambda _: self._audio_controls())
+        self.mic_scan_button = ttk.Button(panel, text="Buscar micrófonos", command=self.refresh_microphones)
+        self.mic_scan_button.grid(row=1, column=1)
+        modes = ttk.Frame(panel)
+        modes.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 8))
+        self.auto_check = ttk.Checkbutton(modes, text="Escucha automática · comandos y preguntas directos",
+            variable=self.auto_enabled, command=self.toggle_automatic)
+        self.auto_check.pack(anchor="w")
+        ttk.Label(modes,text='Motor: '+getattr(self.recognizer,'label',type(self.recognizer).__name__),
+            style='Muted.TLabel').pack(anchor='w',pady=(4,0))
+        ttk.Label(modes, text="Decí el comando o la pregunta directamente. En manual, mantené pulsado el botón.",
+                  style="Muted.TLabel", wraplength=650).pack(anchor="w", pady=(6, 0))
+        self.talk_button = tk.Button(panel, text="Mantené pulsado para hablar", bg=PINK, fg="#35263e",
+                                     activebackground="#f2aedc", font=("Segoe UI", 13, "bold"),
+                                     relief="flat", padx=20, pady=12, takefocus=True)
+        self.talk_button.grid(row=3, column=0, columnspan=2, sticky="ew")
+        self.talk_button.bind("<ButtonPress-1>", self.start_recording)
+        self.talk_button.bind("<KeyPress-space>", self.start_recording)
+        self.root.bind("<ButtonRelease-1>", self.stop_recording, add="+")
+        self.root.bind("<KeyRelease-space>", self.stop_recording, add="+")
+        self.root.bind("<FocusOut>", self._focus_out, add="+")
+        self.root.bind("<Unmap>", lambda e: self.stop_recording() if e.widget is self.root else None, add="+")
+        self.audio_label = tk.Label(panel, textvariable=self.audio_message, bg=BG, fg=INK,
+                                    font=("Segoe UI", 11), anchor="w", wraplength=650, pady=8)
+        self.audio_label.grid(row=4, column=0, columnspan=2, sticky="ew")
+        self.level_bar = ttk.Progressbar(panel, maximum=100, mode="determinate")
+        self.level_bar.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        ttk.Label(panel, text="Automática: pausa de 0,8 s. Manual: soltá el botón para terminar.",
+                  style="Muted.TLabel", wraplength=650).grid(row=6, column=0, columnspan=2, sticky="w")
+        ttk.Label(panel, text="Lo que escuché", style="Section.TLabel").grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 4))
+        tk.Label(panel, textvariable=self.recognition_text, bg="white", fg=INK,
+                 font=("Segoe UI", 11), anchor="w", justify="left", wraplength=600,
+                 padx=12, pady=6, height=2).grid(row=8, column=0, columnspan=2, sticky="ew")
+        ttk.Label(panel, textvariable=self.recognition_message, wraplength=600).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        self._audio_controls()
+
+    def _audio_controls(self):
+        idle = self.audio_phase == "idle" and not self.audio_scan_busy and not self.auto_enabled.get()
+        self.mic_combo.configure(state="readonly" if idle else "disabled")
+        self.mic_scan_button.configure(state="normal" if idle else "disabled")
+        probing=self._probe_recording or self.audio_phase=='probe_playback'
+        self.probe_button.configure(text='Detener prueba' if probing else 'Probar micrófono',
+            state='normal' if probing or (idle and self.recognition_ready and not self._microphone_blocked() and not self.voice_inflight
+                                         and self.mic_value.get() in self.inputs) else 'disabled')
+        # Keep the button enabled during recording so it receives release events.
+        allowed = self.recognition_ready and not self._microphone_blocked() and not self.auto_enabled.get() and not self.voice_inflight and not self.audio_scan_busy and self.mic_value.get() in self.inputs and self.audio_phase in ("idle", "starting", "warming", "recording")
+        self.talk_button.configure(state="normal" if allowed else "disabled")
+        auto_allowed = self.auto_enabled.get() or (idle and self.recognition_ready and not self._microphone_blocked() and not self.voice_inflight and self.connected and self.mic_value.get() in self.inputs)
+        self.auto_check.configure(state="normal" if auto_allowed else "disabled")
+        if hasattr(self, 'catalog_buttons'):
+            for button in self.catalog_buttons:
+                button.configure(state="normal" if self.connected and not self.busy and self.audio_phase=="idle" else "disabled")
+        self._speech_controls()
+
+    def _audio_submit(self, operation, action):
+        def run():
+            try:
+                self.audio_events.put((operation, action(), None))
+            except Exception as error:
+                if not isinstance(error, (AudioError, RecognitionError)):
+                    logging.exception("Audio operation failed: %s", operation)
+                    error = AudioError("No se pudo completar la captura. Revisá el micrófono.")
+                self.capture.cancel()
+                self.audio_events.put((operation, None, error))
+        self.audio_executor.submit(run)
+
+    def refresh_microphones(self):
+        if self.auto_enabled.get() or self.audio_phase != "idle" or self.audio_scan_busy or self.closed:
+            return
+        self.audio_scan_busy = True
+        self._audio_controls()
+        self._audio_submit("inputs", self.audio_provider)
+
+    def start_recording(self, event=None, *, probe=False):
+        if not self.recognition_ready or self._microphone_blocked() or self.voice_inflight or self.auto_enabled.get() or self.closed or self.audio_phase != "idle" or self.audio_scan_busy:
+            return "break"
+        device = self.inputs.get(self.mic_value.get())
+        if device is None:
+            return "break"
+        self._probe_recording=probe
+        self.talk_button.focus_set()
+        self.last_recording = None
+        self.capture_connection_token = self.connection_token if self.connected else None
+        self._capture_reply_generation = self.replies.generation
+        self._capture_ai_generation=self.ai_generation
+        self._capture_ai_voice_generation=self.ai_replies.generation
+        self._capture_query_connection=self.connection_token
+        self.recognized_action = None
+        self.recognized_query = None
+        self.recognition_text.set("Esperando la captura…")
+        self.recognition_message.set("")
+        self.capture.arm()
+        self.audio_failed = False
+        self.audio_phase = "starting"
+        self.audio_message.set("Preparando micrófono… Esperá a «Escuchando» para hablar.")
+        self.talk_button.configure(text="Soltá para terminar")
+        self._audio_controls()
+        self._audio_submit("start", lambda: self.capture.start(device.index))
+        return "break"
+
+    def stop_recording(self, event=None):
+        if self._probe_recording and event is not None:
+            return
+        if self.closed or self.audio_phase not in ("starting", "warming", "recording"):
+            return
+        self.capture.cancel()
+        self.audio_phase = "stopping"
+        self.audio_message.set("Cerrando micrófono…")
+        self._audio_controls()
+        self._audio_submit("stop", self.capture.finish)
+
+    def test_microphone(self):
+        if self._probe_recording:
+            self._clear_probe_timer()
+            self._probe_recording=False
+            self.audio_failed=True
+            self.stop_recording()
+            return
+        if self.audio_phase=='probe_playback':
+            self.microphone_probe.stop()
+            return
+        self.start_recording(probe=True)
+        if self._probe_recording:
+            self.recognition_text.set('Prueba de micrófono: no se ejecutan comandos.')
+            self.recognition_message.set('Al indicar Escuchando, hablá unos cuatro segundos. Después vas a escucharte.')
+
+    def _clear_probe_timer(self):
+        if self._probe_timer is not None:
+            self.root.after_cancel(self._probe_timer)
+            self._probe_timer=None
+
+    def _finish_probe_playback(self):
+        self.playback_gate.finish(self._probe_playback_token)
+        self._probe_playback_token=None
+
+    def _focus_out(self, event):
+        def check_focus():
+            if not self.closed and self.root.focus_displayof() is None:
+                self.stop_recording()
+        self.root.after_idle(check_focus)
+
+    def _drain_audio(self):
+        try:
+            while True:
+                operation, result, error = self.audio_events.get_nowait()
+                if operation=='recognizer_ready':
+                    self.recognition_ready=error is None
+                    self.recognition_message.set(str(error) if error else 'Reconocimiento listo. Decí el comando o la pregunta directamente.')
+                    self._audio_controls()
+                    continue
+                if operation=='youtube':
+                    self._youtube_pending=False
+                    if self.audio_phase=='opening_browser':
+                        self.audio_phase='idle'
+                        self.talk_button.configure(text='Mantené pulsado para hablar')
+                        self.level_bar['value']=0
+                    if not self._youtube_cancel.is_set():
+                        message,spoken=result if not error else ('No se pudo abrir YouTube. Probá de nuevo.',None)
+                        self.recognition_message.set(message)
+                        if spoken and self._capture_reply_generation==self.replies.generation:
+                            self.speak_text(spoken)
+                    self._audio_controls()
+                    continue
+                if operation.startswith('auto_'):
+                    self._handle_automatic_event(operation, result, error)
+                    self._audio_controls()
+                    continue
+                if error:
+                    if self._probe_recording or operation=='probe_playback':
+                        self._probe_recording=False
+                        self._clear_probe_timer()
+                        self._finish_probe_playback()
+                    self.audio_failed = True
+                    self.audio_phase = "idle"
+                    self.audio_scan_busy = False
+                    self.last_recording = None
+                    self.recognized_action = None
+                    self.recognized_query = None
+                    self.recognition_text.set("—")
+                    self.recognition_message.set(str(error))
+                    self.audio_message.set(str(error))
+                    self._log(str(error))
+                elif operation == "inputs":
+                    self.audio_scan_busy = False
+                    previous = self.mic_value.get()
+                    self.inputs = {device.label: device for device in result}
+                    self.mic_combo.configure(values=list(self.inputs))
+                    default = next((device.label for device in result if device.is_default), next(iter(self.inputs), ""))
+                    self.mic_value.set(previous if previous in self.inputs else default)
+                    self.audio_message.set("Micrófono apagado. Listo para capturar." if result else "No hay micrófonos. Conectá uno y buscá de nuevo.")
+                elif operation == "start" and self.audio_phase == "starting":
+                    if result and self.capture.requested.is_set():
+                        self.audio_phase = "warming"
+                    else:
+                        self.stop_recording()
+                elif operation == "stop":
+                    self.audio_phase = "idle"
+                    if self._probe_recording:
+                        self._probe_recording=False
+                        self._clear_probe_timer()
+                        self.last_recording=None
+                        if self.capture.overflow or result.duration<.15:
+                            self.recognition_message.set('La prueba quedó incompleta o perdió muestras. Repetí la prueba.')
+                        else:
+                            self.microphone_probe.arm()
+                            self.audio_phase='probe_playback'
+                            self._probe_playback_token=self.playback_gate.begin()
+                            self.audio_message.set('Escuchá cómo llega tu voz. El micrófono está cerrado.')
+                            self._audio_submit('probe_playback',lambda recording=result:self.microphone_probe.play(recording))
+                    elif self.audio_failed:
+                        self.last_recording = None
+                    elif result.duration >= 0.15:
+                        self.last_recording = result
+                        message = f"Micrófono apagado. Captura lista: {result.duration:.1f} s."
+                        if self.capture.limit_reached:
+                            message += " Se alcanzó el límite de 10 segundos."
+                        if self.capture.overflow:
+                            message += " Se perdieron muestras; probá otra entrada."
+                        self.audio_message.set(message)
+                        self.audio_phase = "recognizing"
+                        self.recognition_message.set("Reconociendo la frase…")
+                        self.talk_button.configure(text="Reconociendo…")
+                        self.level_bar['value'] = 0
+                        self._audio_submit("recognized", lambda recording=result: self.recognizer.recognize(recording))
+                    else:
+                        self.audio_message.set("Micrófono apagado. Captura muy corta; mantené pulsado mientras hablás.")
+                        self.recognition_text.set("—")
+                        self.recognition_message.set("Captura demasiado corta para reconocer.")
+                    self._log(self.audio_message.get())
+                elif operation=='probe_playback':
+                    self.audio_phase='idle'
+                    self._finish_probe_playback()
+                    self.recognition_message.set(result)
+                    self.audio_message.set('Prueba finalizada. Podés cambiar de entrada y repetirla.')
+                elif operation == "recognized":
+                    self.audio_phase = "idle"
+                    self.recognized_action = result.action
+                    self.recognized_query = result.query
+                    self.recognition_text.set(result.query or result.text or "—")
+                    self.recognition_message.set(result.message)
+                    if result.youtube is not None:
+                        self._open_youtube(result.youtube)
+                    elif result.action is not None:
+                        if self.connected and self.capture_connection_token == self.connection_token:
+                            self.pending_action = (self.connection_token, result.action)
+                            self._pending_action_reply_generation=self._capture_reply_generation
+                            self.audio_phase = 'sending'
+                            self.recognition_message.set('Enviando la orden al ESP32…')
+                            self.talk_button.configure(text='Esperando confirmación…')
+                        else:
+                            self.recognition_message.set('Acción no enviada. Conectá el ESP32 y repetí la frase.')
+                    elif result.query is not None:
+                        self._send_voice_query(result.query)
+                if self.audio_phase == "idle":
+                    self.talk_button.configure(text="Mantené pulsado para hablar")
+                    self.level_bar['value'] = 0
+                self._audio_controls()
+        except Empty:
+            pass
+        if self.audio_phase == "warming":
+            if self.capture.ready.is_set():
+                self.audio_phase = "recording"
+                if self._probe_recording and self._probe_timer is None:
+                    self._probe_timer=self.root.after(4000,self.stop_recording)
+            elif self.capture.finished.is_set():
+                self.stop_recording()
+        if self.audio_phase == "recording":
+            self.level_bar['value'] = self.capture.level*100
+            self.audio_message.set(f"Escuchando… {self.capture.duration:.1f} / 4 s. Hablá normalmente." if self._probe_recording else
+                                   f"Escuchando… {self.capture.duration:.1f} / 10 s. Soltá para terminar.")
+            if self.capture.limit_reached or self.capture.finished.is_set():
+                self.stop_recording()
+
+    def _open_youtube(self,action):
+        if (self.closed or self._youtube_pending
+            or self._capture_ai_generation!=self.ai_generation
+            or self._capture_query_connection!=self.connection_token):
+            self.recognition_message.set('Comando de YouTube descartado: el estado cambió. Repetí la frase.')
+            return
+        self._youtube_cancel=Event()
+        cancel=self._youtube_cancel
+        self._youtube_pending=True
+        self.audio_phase='opening_browser'
+        self.automatic_capture.pause()
+        self.recognition_message.set('Abriendo YouTube en tu navegador…')
+        self._audio_submit('youtube',lambda: (('Acción descartada.',None) if cancel.is_set()
+                                            else self.youtube_opener(action,cancel_event=cancel)))
+
+    def toggle_automatic(self):
+        if not self.auto_enabled.get():
+            self.stop_automatic()
+            return
+        device = self.inputs.get(self.mic_value.get())
+        if not self.recognition_ready or self._microphone_blocked() or self.voice_inflight or self.closed or not self.connected or device is None or self.audio_phase!='idle':
+            self.auto_enabled.set(False)
+            self._audio_controls()
+            return
+        self.auto_generation += 1
+        generation = self.auto_generation
+        self.automatic_capture.arm()
+        self.audio_phase = 'auto_starting'
+        self.audio_message.set('Preparando escucha automática…')
+        self.recognition_message.set('Decí «enojado derecha» o «cómo estás» cuando esté lista.')
+        self._audio_controls()
+        self._audio_submit('auto_start', lambda: (generation, self.automatic_capture.start(device.index)))
+
+    def stop_automatic(self, message='Escucha automática apagada. Micrófono cerrado.'):
+        self.auto_enabled.set(False)
+        self.auto_generation += 1
+        generation = self.auto_generation
+        self.auto_running = False
+        self.automatic_capture.cancel()
+        self.automatic_capture.pause()
+        self.capture_connection_token = None
+        self.recognized_query = None
+        self.pending_action = None
+        self._pending_action_reply_generation=None
+        self.audio_phase = 'auto_stopping'
+        self.audio_message.set('Cerrando escucha automática…')
+        self._audio_controls()
+        def finish():
+            self.automatic_capture.finish()
+            return generation, message
+        self._audio_submit('auto_stop', finish)
+
+    def _handle_automatic_event(self, operation, result, error):
+        if error is not None:
+            if operation=='auto_stop':
+                self.auto_enabled.set(False)
+                self.auto_running = False
+                self.audio_phase = 'idle'
+                self.audio_message.set(str(error))
+            else:
+                self.stop_automatic(str(error))
+            self._log(str(error))
+            return
+        generation, value = result
+        if generation!=self.auto_generation:
+            return
+        if operation=='auto_stop':
+            self.audio_phase = 'idle'
+            self.audio_message.set(value)
+            self.level_bar['value'] = 0
+            return
+        if not self.auto_enabled.get():
+            return
+        if operation=='auto_start':
+            if not value:
+                self.stop_automatic('No se pudo iniciar la escucha automática.')
+                return
+            self.auto_running = True
+            self.audio_phase = 'idle'
+        elif operation=='auto_recognized':
+            # The existing sender still checks the live connection token and
+            # waits for the device acknowledgment. Nothing is retried.
+            self.audio_events.put(('recognized', value, None))
+
+    def _tick_automatic(self):
+        if not self.auto_enabled.get() or not self.auto_running or self.closed:
+            return
+        capture = self.automatic_capture
+        if capture.finished.is_set() or not capture.requested.is_set():
+            self.stop_automatic('El micrófono se desconectó. Revisá la entrada y activá la escucha de nuevo.')
+            return
+        if self._microphone_blocked() or self._pending_reply is not None:
+            capture.pause()
+            self.level_bar['value']=0
+            self.audio_message.set('Cancelando consulta. Escucha en pausa…' if self._ai_cancel_completion_message is not None else
+                                  'Aubar está preparando la respuesta. Escucha en pausa…' if self._conversation_blocks_microphone() else
+                                  'Escucha en pausa mientras Aubar habla…' if self.playback_gate.active or self.speech.busy else
+                                   'Esperando un instante antes de volver a escuchar…')
+            return
+        try:
+            recording = capture.utterances.get_nowait()
+        except Empty:
+            recording = None
+        if isinstance(recording, AudioError):
+            self.stop_automatic(str(recording))
+            return
+        if recording is not None:
+            generation = self.auto_generation
+            self.capture_connection_token = self.connection_token
+            self._capture_reply_generation=self.replies.generation
+            self._capture_ai_generation=self.ai_generation
+            self._capture_ai_voice_generation=self.ai_replies.generation
+            self._capture_query_connection=self.connection_token
+            self.last_recording = None  # No continuous audio retained by the UI.
+            self.recognized_action = None
+            self.recognized_query = None
+            self.audio_phase = 'auto_recognizing'
+            self.audio_message.set('Frase terminada. Reconociendo…')
+            self.level_bar['value'] = 0
+            self.recognition_text.set('Procesando la voz…')
+            self.recognition_message.set('Reconociendo el comando o la pregunta…')
+            self._audio_controls()
+            self._audio_submit('auto_recognized', lambda: (
+                generation, self.recognizer.recognize_automatic(recording)))
+            return
+        if self.audio_phase=='idle' and not self.busy and self.pending_action is None:
+            if not capture.ready.is_set():
+                self.audio_message.set('Preparando micrófono…')
+                return
+            capture.resume()
+            self.level_bar['value'] = capture.level*100
+            self.audio_message.set('Calibrando ruido ambiente… Esperá un instante sin hablar.' if capture.calibrating else
+                                   'Voz detectada. Hacé una pausa al terminar…' if capture.speaking else
+                                   'Escucha automática activa. Decí un comando o una pregunta directamente.')
+
+    def _controls(self):
+        def enable(widget, allowed):
+            widget.configure(state="normal" if allowed else "disabled")
+        enable(self.connect_button, not self.busy and not self.connected and self.port_value.get() in self.ports)
+        enable(self.disconnect_button, not self.busy and self.connected)
+        enable(self.status_button, not self.busy and self.connected)
+        enable(self.scan_button, not self.busy and not self.connected)
+        self.port_combo.configure(state="readonly" if not self.busy and not self.connected else "disabled")
+        for button in self.catalog_buttons:
+            enable(button, self.connected and not self.busy and self.audio_phase=="idle")
+        self._audio_controls()
+
+    def _message(self, text, error=False):
+        self.banner_value.set(text)
+        self.banner.configure(bg="#fbe8ed" if error else "#e8eef8", fg="#942b45" if error else INK)
+
+    def _log(self, text):
+        self.activity.configure(state="normal")
+        self.activity.insert("end", text+"\n")
+        if int(self.activity.index("end-1c").split(".")[0]) > 80:
+            self.activity.delete("1.0", "2.0")
+        self.activity.see("end")
+        self.activity.configure(state="disabled")
+
+    def _submit(self, operation, action):
+        if self.busy or self.closed:
+            return
+        self.busy = True
+        self._controls()
+        def run():
+            try:
+                self.events.put((operation, action(), None))
+            except Exception as error:
+                self.session.close()
+                if not isinstance(error, DeviceError):
+                    logging.exception("Desktop operation failed: %s", operation)
+                    error = DeviceError("No se pudo completar la operación. Volvé a conectar el dispositivo.")
+                self.events.put((operation, None, error))
+        self.executor.submit(run)
+
+    def refresh_ports(self):
+        self._submit("ports", self.port_provider)
+
+    def connect(self):
+        port = self.ports.get(self.port_value.get())
+        if port and not self.busy:
+            self._invalidate_connection()
+            self._message(f"Conectando con {port.device}…")
+            self._submit("connect", lambda: (port.device, self.session.connect(port.device)))
+
+    def disconnect(self):
+        if self.busy:
+            return
+        owner=self._ai_visual_owner
+        neutralize=(owner is not None and self.connected and owner.connection==self.connection_token
+                    and owner.control==self._avatar_generation)
+        self._invalidate_connection()
+        self._submit("disconnect",lambda:self._release_device(neutralize))
+
+    def _release_device(self,neutralize):
+        try:
+            if getattr(self.session,'connected',False) and getattr(self.session,'speech_supported',False):
+                self.session.set_speaking(False)
+            if neutralize:
+                action,_=safe_avatar_action('EXPRESSION','neutral')
+                self.session.apply_action(action)
+        finally:
+            self.session.close()
+
+    def _invalidate_connection(self):
+        self._speech_avatar_sent = False
+        self._speech_avatar_at = 0.0
+        self.connection_token += 1
+        had_query=self._ai_future is not None
+        self._invalidate_ai_turn(restore_visual=False)
+        if had_query:
+            self._cancel_status('Consulta cancelada por el cambio de conexión.')
+        self.ai_avatar_message.set('Avatar sin conexión confirmada.')
+        self._discard_ai_speech()
+        self.recognized_query=None
+        self.replies.cancel()
+        if self._speech_response_token is not None:
+            self.stop_speech()
+        if self.pending_action is not None or self.audio_phase == 'sending':
+            self.recognition_message.set('Orden descartada por desconexión. Reconectá y repetí la frase.')
+            self.audio_phase = 'idle'
+            self.talk_button.configure(text='Mantené pulsado para hablar')
+        self.pending_action = None
+        self._pending_action_reply_generation=None
+        if self.auto_enabled.get() or self.auto_running:
+            self.stop_automatic('Escucha apagada por desconexión. Reconectá y activala de nuevo.')
+        self._audio_controls()
+
+    def _dispatch_voice(self):
+        if self.pending_action is None or self.busy or self.closed:
+            return
+        token, action = self.pending_action
+        generation=self._pending_action_reply_generation
+        if generation is None:
+            generation=self.replies.generation
+        self._pending_action_reply_generation=None
+        self.pending_action = None
+        if not self.connected or token != self.connection_token:
+            self.audio_phase = 'idle'
+            self.recognition_message.set('Acción no enviada. Reconectá y repetí la frase.')
+            self.talk_button.configure(text='Mantené pulsado para hablar')
+            self._audio_controls()
+            return
+        self.voice_inflight = True
+        self._take_manual_avatar()
+        self._submit('voice', lambda: (token, action, self.session.apply_action(action),generation))
+
+    def refresh_status(self):
+        self._submit("status", self.session.status)
+
+    def _clear_state(self):
+        self.animation_value.set("Animación: —")
+        for value in self.values.values():
+            value.set("—")
+
+    def _apply_status(self, status):
+        self.values["expression"].set(EXPRESSIONS.get(status.expression, status.expression.capitalize()))
+        self.animation_value.set("Animación: "+ANIMATIONS.get(status.animation, "Ninguna"))
+        self.values["mode"].set("Automático" if status.mode == "auto" else "Manual")
+        self.values["look"].set(status.look.capitalize())
+
+    def _dispatch_speech_avatar(self):
+        if not self.connected or self.busy or not hasattr(self.session,'set_speaking'):
+            return
+        if getattr(self.session,'speech_supported',None) is False:
+            return
+        playing = bool(getattr(self.speech,'articulating',getattr(self.speech,'playing',False)))
+        now = time.monotonic()
+        if playing != self._speech_avatar_sent or playing and now-self._speech_avatar_at>=0.7:
+            self._speech_avatar_sent = playing
+            self._speech_avatar_at = now
+            self._submit('speech_avatar', lambda: self.session.set_speaking(playing))
+
+    def _follow_performance(self):
+        segment=getattr(self.speech,'performance',None)
+        if not self._speech_is_ai or not segment:
+            return
+        key=(segment['index'],segment['avatar_type'],segment['avatar_id'])
+        if key==self._speech_plan_key:
+            return
+        self._speech_plan_key=key
+        command={'animation':'ANIMATION','expression':'EXPRESSION'}.get(segment['avatar_type'])
+        action,fallback=safe_avatar_action(command,segment['avatar_id'])
+        if not fallback:
+            self._queue_ai_visual(action,'answer')
+            self._speech_message('Interpretación: '+segment['delivery']+' · Onyx: ritmo, energía y pausas.')
+
+    def _drain(self):
+        self._drain_whatsapp()
+        sources_status=getattr(self.ai_service,'sources_status',None)
+        if callable(sources_status):
+            self.groq_sources_message.set(sources_status())
+        try:
+            while True:
+                operation, result, error = self.events.get_nowait()
+                self.busy = False
+                if operation=='ai_avatar':
+                    self._ai_avatar_inflight=False
+                if operation=='voice':
+                    self.voice_inflight = False
+                if error:
+                    self._invalidate_connection()
+                    self.connected = False
+                    self.active_port = None
+                    self._clear_state()
+                    self._message(str(error), error=True)
+                    self._log(str(error))
+                    if operation == 'voice':
+                        self.recognition_message.set(str(error))
+                    if operation == 'catalog':
+                        self.catalog_message.set(str(error))
+                    if operation=='ai_avatar':
+                        self.ai_avatar_message.set('No se pudo confirmar la expresión del avatar. Revisá la conexión USB.')
+                elif operation == "ports":
+                    previous = self.port_value.get()
+                    self.ports = {port.label: port for port in result}
+                    self.port_combo.configure(values=list(self.ports))
+                    selected = next((port.label for port in result if port.is_esp32), next(iter(self.ports), ""))
+                    self.port_value.set(previous if previous in self.ports else selected)
+                    self._message("Elegí el puerto y conectá tu ESP32." if result else "No hay puertos. Conectá el cable USB y buscá de nuevo.")
+                elif operation == "connect":
+                    self.active_port, status = result
+                    self.connected = True
+                    self.ai_avatar_message.set('Avatar conectado. Listo para acompañar próximas respuestas.')
+                    self._apply_status(status)
+                    self._message(f"Conectado a {self.active_port}. El estado se actualiza automáticamente.")
+                    self._log(f"Conexión confirmada con Aubar Bot en {self.active_port}.")
+                elif operation in ("status", "poll"):
+                    self._apply_status(result)
+                    if operation == "status":
+                        self._log("Estado del dispositivo actualizado.")
+                elif operation=='ai_avatar':
+                    cue,status=result
+                    if (self.connected and cue.connection==self.connection_token
+                        and cue.conversation==self.ai_generation and cue.control==self._avatar_generation):
+                        self._apply_status(status)
+                        self.ai_avatar_message.set('Avatar: '+cue.action.label+'. Confirmado por el ESP32.')
+                        if cue.phase=='reset' and self._ai_visual_owner==cue:
+                            self._ai_visual_owner=None
+                elif operation in ('voice', 'catalog'):
+                    token, action, status, generation = result
+                    confirmed=token == self.connection_token and self.connected
+                    if confirmed:
+                        self._apply_status(status)
+                        if operation=='catalog':
+                            self.catalog_message.set(f'{action.label}. Confirmado por el ESP32.')
+                        else:
+                            self.recognition_message.set(f'{action.label}. Confirmado por el ESP32.')
+                        self._log(f'{action.label}. Confirmado por el ESP32.')
+                    if operation=='voice':
+                        if self.audio_phase=='sending':
+                            self.audio_phase = 'idle'
+                        self.talk_button.configure(text='Mantené pulsado para hablar')
+                    if confirmed:
+                        self._queue_confirmed_reply(action,token,generation)
+                    self._audio_controls()
+                elif operation == "disconnect":
+                    self.connected = False
+                    self.active_port = None
+                    self._clear_state()
+                    self._message("Sin conexión. Podés seleccionar un puerto y volver a conectar.")
+                    self._log("Puerto liberado. La placa mantiene su modo de funcionamiento.")
+                self._controls()
+        except Empty:
+            pass
+        self._drain_audio()
+        self._drain_ai()
+        self._drain_speech()
+        self._follow_performance()
+        self._drain_reply()
+        self._drain_ai_reply()
+        self._speech_controls()
+        self._refresh_playback_gate()
+        self._tick_automatic()
+        self._dispatch_voice()
+        self._dispatch_ai_avatar()
+        self._dispatch_speech_avatar()
+        self._ai_controls()
+        if not self.closed:
+            self._events_timer = self.root.after(80, self._drain)
+
+    def _poll(self):
+        if self.connected and not self.busy and self.pending_action is None and self._pending_ai_avatar is None:
+            self._submit("poll", self.session.status)
+        if not self.closed:
+            self._poll_timer = self.root.after(1500, self._poll)
+
+    def close(self):
+        if self.closed:
+            return
+        owner=self._ai_visual_owner
+        neutralize=(owner is not None and self.connected and owner.connection==self.connection_token
+                    and owner.control==self._avatar_generation)
+        self.closed = True
+        self.whatsapp_inbox.close()
+        self._whatsapp_notices.clear()
+        self._whatsapp_history.clear()
+        self._clear_probe_timer()
+        self.microphone_probe.stop()
+        self._invalidate_ai_turn(restore_visual=False)
+        self.ai_replies.cancel()
+        self.recognized_query=None
+        self.conversation.reset()
+        self._ai_conversation_request=None
+        self._ai_future=None
+        self.ai_service.close()
+        self.replies.cancel()
+        self.speech.close()
+        self.auto_enabled.set(False)
+        self.auto_generation += 1
+        self.automatic_capture.cancel()
+        self.pending_action = None
+        self.capture.cancel()
+        self.last_recording = None
+        self.root.after_cancel(self._events_timer)
+        self.root.after_cancel(self._poll_timer)
+        self.executor.submit(self._release_device,neutralize)
+        self.executor.shutdown(wait=False, cancel_futures=False)
+        self.audio_executor.submit(self.capture.finish)
+        self.audio_executor.submit(self.automatic_capture.finish)
+        self.audio_executor.shutdown(wait=False, cancel_futures=False)
+        self.root.destroy()
+
+
+def main():
+    log_path = PROJECT_ROOT / "pc" / "aubar-control.log"
+    logging.basicConfig(filename=log_path, encoding="utf-8", level=logging.ERROR)
+    root = tk.Tk()
+    AubarApp(root)
+    root.mainloop()
