@@ -105,6 +105,12 @@ Si el director no puede elegir una actuación con confianza, conserva el texto
 y usa un gesto neutral. Un pedido explícito de sonreír usa la sonrisa suave;
 las risas y la alegría intensa conservan sus gestos propios.
 
+Podés pedir la actuación antes o después del verbo, por ejemplo
+«Aubar, sospechoso, decime: hola Nahuel» o «decime con sospecha: hola Nahuel».
+También reconoce pedidos explícitos de tristeza, enojo, risa, sorpresa, miedo,
+timidez, curiosidad, confusión, orgullo, aburrimiento y celebración. El texto
+entre comillas se trata como las palabras a decir, no como instrucciones de gesto.
+
 ### Comprobar el panel
 
 1. En **IA**, escribí una pregunta y pulsá **Enviar**. Con una clave válida y

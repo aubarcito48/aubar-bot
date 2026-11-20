@@ -118,6 +118,52 @@ def _decision(metadata, probabilities):
     return metadata['labels'][best], confidence, accepted
 
 
+def requested_action(question):
+    """Recognize explicit delivery outside quoted words, in either word order."""
+    cue = normalize(instruction(question))
+    cue = re.sub(r'^(?:aubar|kirby)\s+', '', cue)
+    negative = ('sin sonreir', 'sin sonrisa', 'without smiling', 'no smile',
+                'no actues', 'no quiero que actues', 'sin actuar', 'sin representarlo',
+                'do not act', 'without acting', 'just define', 'solo defini')
+    if any(phrase in cue for phrase in negative):
+        return safe_avatar_action('EXPRESSION', 'neutral')[0], 'explicit-neutral'
+    if re.search(r'\b(?:explicame|explica|defini|define|significa|explain|means)\b', cue):
+        return None
+    acting = re.search(r'\b(?:decime|dicime|deci|decilo|dime|di|dilo|lee|leeme|leelo|'
+                       r'habla|hablame|hables|responde|respondeme|actua|interpreta|'
+                       r'ponete|ponte|say|reply|read|speak|act|perform)\b', cue)
+    # Before the verb must be the whole style, not part of a sentence.
+    before = cue[:acting.start()].strip() if acting else cue
+    after = cue[acting.end():].strip() if acting else ''
+    lead = r'(?:(?:esto|eso|el texto|un texto|la frase|este mensaje)\s+)?'
+    modifier = r'(?:(?:con tono|en tono|de forma|de manera|in a|in an)\s+)?'
+    for kind, identifier, forms in (
+        ('EXPRESSION', 'contento', r'sonrei|sonrie|sonreir|sonriendo|con (?:una )?sonrisa|smile|smiling|with a smile'),
+        ('ANIMATION', 'suspicious', r'sospechos[oa]|desconfiad[oa]|esceptic[oa]|suspicaz|con sospecha|con desconfianza|con escepticismo|suspicious(?:ly)?|with suspicion|distrustfully'),
+        ('ANIMATION', 'laughing', r'riendo|entre risas|con (?:una )?risa|con carcajadas|laughing|with laughter|with a chuckle'),
+        ('ANIMATION', 'sad', r'con tristeza|triste|tristemente|apenad[oa]|con pena|sadly|with sadness|sorrowfully'),
+        ('ANIMATION', 'angry', r'con enojo|enojad[oa]|furios[oa]|con bronca|angrily|with anger|furiously'),
+        ('ANIMATION', 'happy', r'content[oa]|alegre|con alegria|con felicidad|happily|cheerfully|with joy'),
+        ('ANIMATION', 'scared', r'asustad[oa]|con miedo|con temor|atemorizad[oa]|scared|fearfully|with fear'),
+        ('ANIMATION', 'surprised', r'sorprendid[oa]|asombrad[oa]|con sorpresa|con asombro|surprised|with surprise|astonished'),
+        ('ANIMATION', 'curious', r'curios[oa]|intrigad[oa]|con curiosidad|con interes|curiously|with curiosity|intrigued'),
+        ('ANIMATION', 'confused', r'confundid[oa]|desconcertad[oa]|con confusion|confused|with confusion|puzzled'),
+        ('ANIMATION', 'proud', r'orgullos[oa]|satisfech[oa]|con orgullo|con satisfaccion|proudly|with pride'),
+        ('ANIMATION', 'shy', r'timid[oa]|avergonzad[oa]|con timidez|con verguenza|shyly|with shyness|bashfully'),
+        ('ANIMATION', 'bored', r'aburrid[oa]|desganad[oa]|con aburrimiento|sin entusiasmo|bored|with boredom'),
+        ('ANIMATION', 'playful', r'jugueton(?:a)?|con picardia|con humor jugueton|playfully|mischievously'),
+        ('ANIMATION', 'excited', r'entusiasmad[oa]|emocionad[oa]|con entusiasmo|lleno de emocion|excitedly|with excitement|enthusiastically'),
+        ('ANIMATION', 'celebrate', r'festejando|celebrando|con festejo|con tono de celebracion|celebrating|with celebration'),
+    ):
+        if (re.fullmatch(modifier + '(?:' + forms + r')(?: tone)?', before) or
+            acting and re.match(lead + modifier + '(?:' + forms + r')\b', after)):
+            return safe_avatar_action(kind, identifier)[0], 'explicit-style'
+    # "Sonreí diciendo ..." uses the imperative itself as the acting verb.
+    if re.match(r'^(?:sonrei|sonrie|smile)\s+(?:diciendo|mientras|saying|while)\b', cue):
+        return safe_avatar_action('EXPRESSION', 'contento')[0], 'explicit-smile'
+    return None
+
+
 def direct_reply(text, question):
     """Preserve approved words; choose only catalog visuals and bounded Onyx controls."""
     neutral = normalize_reply(text)
@@ -128,37 +174,11 @@ def direct_reply(text, question):
         # This chooses a visual. No USB command, browser action or MODE is executed.
         return DirectorDecision(AvatarReply(neutral.text, action, False), 'explicit-catalog',
                                 action.command + ':' + action.argument, 1.0)
-    # A requested gentle smile is different from laughter or exuberant joy.
-    # Ignore quoted dialogue: the words to speak must not select an emotion.
-    cue = normalize(instruction(question))
-    negative = ('sin sonreir', 'sin sonrisa', 'without smiling', 'no smile',
-                'no actues', 'no quiero que actues', 'sin actuar', 'sin representarlo',
-                'do not act', 'without acting', 'just define', 'solo defini')
-    if any(phrase in cue for phrase in negative):
-        return DirectorDecision(AvatarReply(neutral.text, neutral.action, False),
-                                'explicit-neutral', 'EXPRESSION:neutral', 1.0)
-    acting = re.search(r'\b(?:decime|deci|decilo|dime|di|dilo|lee|leeme|habla|hables|'
-                       r'responde|actua|interpreta|say|reply|read|speak|act|perform)\b', cue)
-    if (cue in ('sonrei', 'sonrie', 'sonreir', 'smile') or acting and (
-        any(word in cue.split() for word in ('sonriendo', 'smiling')) or
-        any(phrase in cue for phrase in ('con una sonrisa', 'con sonrisa', 'with a smile')))):
-        action, _ = safe_avatar_action('EXPRESSION', 'contento')
+    explicit = requested_action(question)
+    if explicit is not None:
+        action, origin = explicit
         return DirectorDecision(AvatarReply(neutral.text, action, False),
-                                'explicit-smile', 'EXPRESSION:contento', 1.0)
-    # Direct acting instructions take priority over uncertain learned wording.
-    # Only inspect the start of the instruction, never the quoted spoken words.
-    if acting and not re.search(r'\b(?:explicame|explica|defini|define|significa|explain|means)\b', cue):
-        delivery = cue[acting.end():].strip()
-        for identifier, forms in (
-            ('laughing', r'riendo|con risa|con una risa|laughing|with laughter'),
-            ('sad', r'con tristeza|triste|tristemente|sadly|with sadness'),
-            ('angry', r'con enojo|enojado|con bronca|angrily|with anger'),
-            ('happy', r'contento|alegre|con alegria|happily|cheerfully'),
-        ):
-            if re.match(r'(?:(?:esto|eso|el texto|un texto|la frase|este mensaje)\s+)?(?:'+forms+r')\b', delivery):
-                action, _ = safe_avatar_action('ANIMATION', identifier)
-                return DirectorDecision(AvatarReply(neutral.text, action, False),
-                                        'explicit-style', 'ANIMATION:'+identifier, 1.0)
+                                origin, action.command + ':' + action.argument, 1.0)
     try:
         label, confidence, accepted = predict_style(question)
         if not accepted:
